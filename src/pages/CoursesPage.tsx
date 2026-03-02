@@ -16,6 +16,17 @@ const CoursesPage = () => {
     loadCourses();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--color-background)]">
+        <Navbar />
+        <div className="flex items-center justify-center pt-32">
+          <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <Navbar />
