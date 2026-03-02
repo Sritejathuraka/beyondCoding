@@ -77,8 +77,8 @@ const MenuButton = ({
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className={`p-2 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-      isActive ? 'bg-gray-200 text-[var(--color-primary)]' : 'text-gray-600'
+    className={`p-2 rounded hover:bg-[var(--color-background)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+      isActive ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'
     }`}
   >
     {children}
@@ -114,7 +114,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-[var(--color-border)] bg-gray-50">
+    <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-background)]">
       {/* Font Family */}
       <select
         onChange={(e) => {
@@ -124,11 +124,11 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
             editor.chain().focus().unsetFontFamily().run();
           }
         }}
-        className="px-2 py-1 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:border-[var(--color-primary)]"
+        className="px-2 py-1 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
         title="Font Family"
       >
         {fontFamilies.map((font) => (
-          <option key={font.value} value={font.value}>
+          <option key={font.value} value={font.value} className="bg-[var(--color-surface)]">
             {font.label}
           </option>
         ))}
@@ -141,18 +141,18 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
             (editor.chain().focus() as any).setFontSize(e.target.value).run();
           }
         }}
-        className="px-2 py-1 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:border-[var(--color-primary)]"
+        className="px-2 py-1 text-sm border border-[var(--color-border)] rounded bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
         title="Font Size"
       >
-        <option value="">Size</option>
+        <option value="" className="bg-[var(--color-surface)]">Size</option>
         {fontSizes.map((size) => (
-          <option key={size} value={size}>
+          <option key={size} value={size} className="bg-[var(--color-surface)]">
             {size}
           </option>
         ))}
       </select>
 
-      <div className="w-px h-6 bg-gray-300 mx-1" />
+      <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Text Style */}
       <MenuButton
@@ -197,7 +197,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
         </svg>
       </MenuButton>
 
-      <div className="w-px h-6 bg-gray-300 mx-1" />
+      <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Headings */}
       <MenuButton
@@ -224,7 +224,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
         <span className="text-sm font-bold">H3</span>
       </MenuButton>
 
-      <div className="w-px h-6 bg-gray-300 mx-1" />
+      <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Lists */}
       <MenuButton
@@ -253,7 +253,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
         </svg>
       </MenuButton>
 
-      <div className="w-px h-6 bg-gray-300 mx-1" />
+      <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Block Elements */}
       <MenuButton
@@ -285,7 +285,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
         </svg>
       </MenuButton>
 
-      <div className="w-px h-6 bg-gray-300 mx-1" />
+      <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Media */}
       <MenuButton onClick={addLink} isActive={editor.isActive('link')} title="Add Link">
@@ -300,7 +300,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
         </svg>
       </MenuButton>
 
-      <div className="w-px h-6 bg-gray-300 mx-1" />
+      <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Undo/Redo */}
       <MenuButton
@@ -372,7 +372,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start writing...' }:
   }, [content, editor]);
 
   return (
-    <div className="border border-[var(--color-border)] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[var(--color-border)] rounded-xl overflow-hidden bg-[var(--color-surface)]">
       <MenuBar editor={editor} />
       <EditorContent editor={editor} />
     </div>

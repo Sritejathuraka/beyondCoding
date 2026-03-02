@@ -29,18 +29,21 @@ const ArticleEditor = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      const article = getArticleById(id);
-      if (article) {
-        setTitle(article.title);
-        setDescription(article.description);
-        setContent(article.content);
-        setCategory(article.category);
+    const loadArticle = async () => {
+      if (id) {
+        const article = await getArticleById(id);
+        if (article) {
+          setTitle(article.title);
+          setDescription(article.description);
+          setContent(article.content);
+          setCategory(article.category);
+        }
       }
-    }
+    };
+    loadArticle();
   }, [id]);
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!title.trim()) {
       alert('Please add a title');
       return;
@@ -60,16 +63,16 @@ const ArticleEditor = () => {
     };
 
     if (isEditing && id) {
-      updateArticle(id, articleData);
+      await updateArticle(id, articleData);
     } else {
-      saveArticle(articleData);
+      await saveArticle(articleData);
     }
 
     setSaving(false);
     navigate('/dashboard');
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!title.trim()) {
       alert('Please add a title');
       return;
@@ -97,9 +100,9 @@ const ArticleEditor = () => {
     };
 
     if (isEditing && id) {
-      updateArticle(id, articleData);
+      await updateArticle(id, articleData);
     } else {
-      saveArticle(articleData);
+      await saveArticle(articleData);
     }
 
     setSaving(false);
@@ -109,10 +112,10 @@ const ArticleEditor = () => {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Editor Header */}
-      <header className="border-b border-[var(--color-border)] bg-white sticky top-0 z-10">
+      <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)] sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="text-xl font-bold">
-            <span className="text-[var(--color-text)]">Beyond</span>
+            <span className="text-[var(--color-text-muted)]">Beyond</span>
             <span className="text-[var(--color-primary)]">code</span>
           </Link>
 
@@ -126,14 +129,14 @@ const ArticleEditor = () => {
             <button
               onClick={handleSaveDraft}
               disabled={saving}
-              className="px-4 py-2 text-sm border border-[var(--color-border)] rounded-full hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm border border-[var(--color-border)] text-[var(--color-text)] rounded-full hover:bg-[var(--color-background)] transition-colors"
             >
               Save Draft
             </button>
             <button
               onClick={handlePublish}
               disabled={saving}
-              className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-full hover:bg-[#a84a3a] transition-colors"
+              className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-full hover:opacity-90 transition-colors"
             >
               {saving ? 'Publishing...' : 'Publish'}
             </button>
@@ -145,18 +148,18 @@ const ArticleEditor = () => {
       <main className="max-w-3xl mx-auto px-6 py-8">
         {showPreview ? (
           /* Preview Mode */
-          <div className="bg-white rounded-xl p-8 border border-[var(--color-border)]">
-            <span className="inline-block px-3 py-1 bg-[#fbe8de] text-[var(--color-primary)] text-xs font-medium rounded-full mb-4">
+          <div className="bg-[var(--color-surface)] rounded-xl p-8 border border-[var(--color-border)]">
+            <span className="inline-block px-3 py-1 bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-medium rounded-full mb-4">
               {category || 'GENERAL'}
             </span>
-            <h1 className="text-4xl font-bold mb-4">{title || 'Untitled Article'}</h1>
+            <h1 className="text-4xl font-bold text-[var(--color-text)] mb-4">{title || 'Untitled Article'}</h1>
             <p className="text-[var(--color-text-muted)] mb-6">{description}</p>
             <div className="flex items-center gap-3 mb-8 pb-8 border-b border-[var(--color-border)]">
-              <div className="w-10 h-10 bg-[var(--color-text-muted)] rounded-full flex items-center justify-center text-white text-sm font-medium">
+              <div className="w-10 h-10 bg-[var(--color-primary)] rounded-full flex items-center justify-center text-white text-sm font-medium">
                 ST
               </div>
               <div>
-                <p className="font-medium">Sriteja</p>
+                <p className="font-medium text-[var(--color-text)]">Sriteja</p>
                 <p className="text-sm text-[var(--color-text-muted)]">
                   {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {calculateReadTime(stripHtml(content))}
                 </p>
@@ -178,11 +181,11 @@ const ArticleEditor = () => {
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full md:w-auto px-4 py-2 border border-[var(--color-border)] rounded-lg bg-white focus:outline-none focus:border-[var(--color-primary)]"
+                className="w-full md:w-auto px-4 py-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
               >
-                <option value="">Select a category</option>
+                <option value="" className="bg-[var(--color-surface)]">Select a category</option>
                 {topics.map((topic) => (
-                  <option key={topic.id} value={topic.name.toUpperCase()}>
+                  <option key={topic.id} value={topic.name.toUpperCase()} className="bg-[var(--color-surface)]">
                     {topic.icon} {topic.name}
                   </option>
                 ))}
@@ -195,7 +198,7 @@ const ArticleEditor = () => {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Article title..."
-              className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder-gray-300"
+              className="w-full text-4xl font-bold bg-transparent text-[var(--color-text)] border-none outline-none placeholder-[var(--color-text-muted)]/50"
             />
 
             {/* Description Input */}
@@ -204,7 +207,7 @@ const ArticleEditor = () => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Short description (shown in article cards)..."
-              className="w-full text-lg text-[var(--color-text-muted)] bg-transparent border-none outline-none placeholder-gray-300"
+              className="w-full text-lg text-[var(--color-text-muted)] bg-transparent border-none outline-none placeholder-[var(--color-text-muted)]/50"
             />
 
             {/* Rich Text Editor */}
