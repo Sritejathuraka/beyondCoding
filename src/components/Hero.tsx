@@ -26,10 +26,10 @@ const Hero = () => {
   }, []);
 
   return (
-    <section className="max-w-7xl mx-auto px-6 pt-32 pb-20 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-32 pb-12 sm:pb-20 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
       {/* Left Content */}
       <div className="animate-fade-in-up">
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-6 sm:mb-8">
           <span className="px-3 py-1 text-xs font-semibold bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] text-white rounded-full">
             MOBILE
           </span>
@@ -41,7 +41,7 @@ const Hero = () => {
           </span>
         </div>
         
-        <h1 className="text-5xl lg:text-7xl font-bold leading-[1.1] mb-8">
+        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-[1.1] mb-6 sm:mb-8">
           <span className="text-[var(--color-text)]">Think </span>
           <span className="gradient-text font-serif italic">beyond</span>
           <br />
@@ -49,18 +49,18 @@ const Hero = () => {
           <span className="gradient-text">.</span>
         </h1>
         
-        <p className="text-[var(--color-text-muted)] text-lg leading-relaxed mb-10 max-w-lg">
+        <p className="text-[var(--color-text-muted)] text-base sm:text-lg leading-relaxed mb-8 sm:mb-10 max-w-lg">
           Insights on mobile development, AI engineering, and the craft of building things that matter — by Sriteja.
         </p>
         
-        <div className="flex items-center gap-4">
-          <Link to="/blogs" className="btn-primary px-8 py-4 text-base inline-flex items-center gap-2 group">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <Link to="/blogs" className="btn-primary px-6 sm:px-8 py-3 sm:py-4 text-base inline-flex items-center justify-center gap-2 group">
             Start Reading
             <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
             </svg>
           </Link>
-          <Link to="/courses" className="btn-outline px-6 py-4 inline-flex items-center gap-2">
+          <Link to="/courses" className="btn-outline px-6 py-3 sm:py-4 inline-flex items-center justify-center gap-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
@@ -69,15 +69,15 @@ const Hero = () => {
         </div>
 
         {/* Stats */}
-        <div className="flex items-center gap-8 mt-12 pt-8 border-t border-[var(--color-border)]">
+        <div className="flex items-center gap-6 sm:gap-8 mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-[var(--color-border)]">
           <div>
-            <p className="text-3xl font-bold gradient-text">{articleCount}</p>
-            <p className="text-sm text-[var(--color-text-muted)]">Articles</p>
+            <p className="text-2xl sm:text-3xl font-bold gradient-text">{articleCount}</p>
+            <p className="text-xs sm:text-sm text-[var(--color-text-muted)]">Articles</p>
           </div>
-          <div className="w-px h-10 bg-[var(--color-border)]" />
+          <div className="w-px h-8 sm:h-10 bg-[var(--color-border)]" />
           <div>
-            <p className="text-3xl font-bold gradient-text">{courseCount}</p>
-            <p className="text-sm text-[var(--color-text-muted)]">Courses</p>
+            <p className="text-2xl sm:text-3xl font-bold gradient-text">{courseCount}</p>
+            <p className="text-xs sm:text-sm text-[var(--color-text-muted)]">Courses</p>
           </div>
         </div>
       </div>
