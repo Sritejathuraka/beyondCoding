@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const Navbar = () => {
-  const { user, signOut, canWrite } = useAuth();
+  const { user, profile, signOut, canWrite } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const closeMenu = () => setIsMenuOpen(false);
+
+  // Get display name from profile or email
+  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'User';
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass border-b border-[var(--color-border)]">
@@ -57,12 +60,20 @@ const Navbar = () => {
           )}
           
           {user ? (
-            <button 
-              onClick={() => signOut()}
-              className="ml-2 px-4 py-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-all duration-300 text-sm rounded-full hover:bg-white/5"
-            >
-              Sign Out
-            </button>
+            <div className="flex items-center gap-2 ml-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)]">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-white text-xs font-medium">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm font-medium text-[var(--color-text)]">{displayName}</span>
+              </div>
+              <button 
+                onClick={() => signOut()}
+                className="px-3 py-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-all duration-300 text-sm rounded-full hover:bg-[var(--color-surface)]"
+              >
+                Sign Out
+              </button>
+            </div>
           ) : (
             <>
               <NavLink to="/login">Sign In</NavLink>
@@ -92,12 +103,23 @@ const Navbar = () => {
             
             <div className="pt-2 border-t border-[var(--color-border)]">
               {user ? (
-                <button 
-                  onClick={() => { signOut(); closeMenu(); }}
-                  className="w-full text-left px-4 py-3 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] rounded-lg transition-colors"
-                >
-                  Sign Out
-                </button>
+                <>
+                  <div className="flex items-center gap-3 px-4 py-3 mb-2">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-white font-medium">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-[var(--color-text)]">{displayName}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{user.email}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => { signOut(); closeMenu(); }}
+                    className="w-full text-left px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                </>
               ) : (
                 <>
                   <MobileNavLink to="/login" onClick={closeMenu}>Sign In</MobileNavLink>
