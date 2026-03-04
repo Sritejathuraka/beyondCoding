@@ -55,9 +55,11 @@ const ExploreTopics = () => {
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 stagger-children relative">
-        {topics.map((topic, index) => (
-          <TopicCard key={topic.id} topic={topic} index={index} />
-        ))}
+        {topics
+          .filter(topic => topic.articleCount >= 1)
+          .map((topic, index) => (
+            <TopicCard key={topic.id} topic={topic} index={index} />
+          ))}
       </div>
     </section>
   );

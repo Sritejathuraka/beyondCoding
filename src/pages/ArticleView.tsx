@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Navbar, Footer } from '../components';
+import { Navbar, Footer, LikeButton, CommentSection } from '../components';
 import { getArticleById, deleteArticle, type StoredArticle, formatDate } from '../services/articleService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -139,8 +139,12 @@ const ArticleView = () => {
               </div>
             </div>
             
-            {/* Admin Controls */}
-            {canWrite && (
+            <div className="flex items-center gap-4">
+              {/* Like Button */}
+              <LikeButton articleId={article.id} size="lg" />
+              
+              {/* Admin Controls */}
+              {canWrite && (
               <div className="flex items-center gap-2">
                 <Link
                   to={`/write/${article.id}`}
@@ -169,6 +173,7 @@ const ArticleView = () => {
                 )}
               </div>
             )}
+            </div>
           </div>
         </header>
 
@@ -178,6 +183,9 @@ const ArticleView = () => {
           style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
           dangerouslySetInnerHTML={{ __html: article.content }}
         />
+
+        {/* Comments Section */}
+        <CommentSection articleId={article.id} />
 
         {/* Article Footer */}
         <footer className="mt-12 pt-8 border-t border-[var(--color-border)]">

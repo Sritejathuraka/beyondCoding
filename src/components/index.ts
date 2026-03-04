@@ -8,3 +8,5 @@ export { default as ExploreTopics } from './ExploreTopics';
 export { default as Newsletter } from './Newsletter';
 export { default as Footer } from './Footer';
 export { default as CourseSidebar } from './CourseSidebar';
+export { default as LikeButton } from './LikeButton';
+export { default as CommentSection } from './CommentSection';

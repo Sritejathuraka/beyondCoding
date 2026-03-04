@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { Article } from '../types';
+import { getLikeCount } from '../services/likeService';
 
 interface ArticleCardProps {
   article: Article;
@@ -7,6 +9,12 @@ interface ArticleCardProps {
 }
 
 const ArticleCard = ({ article, index }: ArticleCardProps) => {
+  const [likeCount, setLikeCount] = useState(0);
+
+  useEffect(() => {
+    getLikeCount(article.id).then(setLikeCount);
+  }, [article.id]);
+
   const categoryColors: Record<string, string> = {
     'ANDROID': 'from-green-500 to-emerald-600',
     'IOS': 'from-gray-500 to-slate-600',
@@ -46,9 +54,19 @@ const ArticleCard = ({ article, index }: ArticleCardProps) => {
       
       {/* Footer */}
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[var(--color-text-muted)]">
-          {article.date} · {article.readTime}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-[var(--color-text-muted)]">
+            {article.date} · {article.readTime}
+          </span>
+          {likeCount > 0 && (
+            <span className="flex items-center gap-1 text-sm text-[var(--color-text-muted)]">
+              <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              {likeCount}
+            </span>
+          )}
+        </div>
         <span className="text-[var(--color-primary-light)] text-sm font-medium flex items-center gap-1 group/link">
           Read 
           <span className="transform group-hover:translate-x-1 transition-transform">→</span>

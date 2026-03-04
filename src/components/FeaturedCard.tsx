@@ -1,11 +1,19 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { Article } from '../types';
+import { getLikeCount } from '../services/likeService';
 
 interface FeaturedCardProps {
   article: Article;
 }
 
 const FeaturedCard = ({ article }: FeaturedCardProps) => {
+  const [likeCount, setLikeCount] = useState(0);
+
+  useEffect(() => {
+    getLikeCount(article.id).then(setLikeCount);
+  }, [article.id]);
+
   return (
     <Link to={`/article/${article.id}`} className="card-modern group cursor-pointer block">
       {/* Featured Image Area with gradient */}
@@ -34,17 +42,27 @@ const FeaturedCard = ({ article }: FeaturedCardProps) => {
           {article.description}
         </p>
         
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-white text-xs font-bold ring-2 ring-white/10">
-            ST
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-white text-xs font-bold ring-2 ring-white/10">
+              ST
+            </div>
+            <div className="flex items-center text-sm text-[var(--color-text-muted)]">
+              <span className="font-medium text-[var(--color-text)]">{article.author}</span>
+              <span className="mx-2 opacity-30">·</span>
+              <span>{article.date}</span>
+              <span className="mx-2 opacity-30">·</span>
+              <span>{article.readTime}</span>
+            </div>
           </div>
-          <div className="flex items-center text-sm text-[var(--color-text-muted)]">
-            <span className="font-medium text-[var(--color-text)]">{article.author}</span>
-            <span className="mx-2 opacity-30">·</span>
-            <span>{article.date}</span>
-            <span className="mx-2 opacity-30">·</span>
-            <span>{article.readTime}</span>
-          </div>
+          {likeCount > 0 && (
+            <span className="flex items-center gap-1 text-sm text-[var(--color-text-muted)]">
+              <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              {likeCount}
+            </span>
+          )}
         </div>
       </div>
     </Link>
