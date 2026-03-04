@@ -10,7 +10,7 @@ export interface Subscriber {
 
 // Subscribe a new email
 // NOTE: Enable after creating 'subscribers' table (run supabase/newsletter.sql)
-export const subscribe = async (email: string, name?: string): Promise<{ success: boolean; error?: string }> => {
+export const subscribe = async (_email: string, _name?: string): Promise<{ success: boolean; error?: string }> => {
   // Return friendly message until table is created
   return { success: false, error: 'Newsletter coming soon! Check back later.' };
   

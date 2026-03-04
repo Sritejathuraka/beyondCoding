@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Navbar, Footer, CourseSidebar } from '../components';
 import SignInPrompt from '../components/SignInPrompt';
 import { getArticleById, type StoredArticle, formatDate } from '../services/articleService';
-import { getCourseById, markChapterComplete, getCourseProgress, type Course, type CourseChapter } from '../services/courseService';
+import { getCourseById, markChapterComplete, getChapterProgress, type Course, type CourseChapter } from '../services/courseService';
 import { useAuth } from '../contexts/AuthContext';
 
 const CourseChapterView = () => {
@@ -26,7 +26,7 @@ const CourseChapterView = () => {
         setArticle(found);
         
         if (foundCourse) {
-          const courseProgress = await getCourseProgress(foundCourse.id);
+          const courseProgress = await getChapterProgress(foundCourse.id);
           setProgress(courseProgress);
         }
       }
@@ -51,7 +51,7 @@ const CourseChapterView = () => {
     if (course && currentChapter) {
       await markChapterComplete(course.id, currentChapter.id);
       // Refresh progress
-      const updatedProgress = await getCourseProgress(course.id);
+      const updatedProgress = await getChapterProgress(course.id);
       setProgress(updatedProgress);
     }
   };
@@ -60,7 +60,7 @@ const CourseChapterView = () => {
     const currentChapter = getCurrentChapter();
     if (course && currentChapter) {
       await markChapterComplete(course.id, currentChapter.id);
-      const updatedProgress = await getCourseProgress(course.id);
+      const updatedProgress = await getChapterProgress(course.id);
       setProgress(updatedProgress);
     }
     setShowSignInPrompt(false);

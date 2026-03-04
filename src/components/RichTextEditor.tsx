@@ -361,12 +361,8 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start writing...' }:
       attributes: {
         class: 'prose prose-lg max-w-none min-h-[400px] p-6 focus:outline-none',
       },
-      handlePaste: (view, event, slice) => {
-        // Let TipTap handle the paste normally, but ensure onChange fires
-        setTimeout(() => {
-          const html = view.state.doc.content.size > 0 ? '' : '';
-          // onUpdate will be called automatically after paste
-        }, 0);
+      handlePaste: () => {
+        // Let TipTap handle the paste normally
         return false; // Let default paste handling continue
       },
     },

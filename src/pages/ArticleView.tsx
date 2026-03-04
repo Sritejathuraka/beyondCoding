@@ -16,10 +16,10 @@ const ArticleView = () => {
     if (!article || !id) return;
     if (window.confirm(`Are you sure you want to delete "${article.title}"? This action cannot be undone.`)) {
       setDeleting(true);
-      const success = await deleteArticle(id);
-      if (success) {
+      try {
+        await deleteArticle(id);
         navigate('/blogs');
-      } else {
+      } catch {
         alert('Failed to delete article. Please try again.');
         setDeleting(false);
       }

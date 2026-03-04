@@ -410,7 +410,34 @@ export const markChapterComplete = async (
 };
 
 /**
- * Get course progress for current user
+ * Get chapter completion status for current user (map of chapterId -> completed)
+ */
+export const getChapterProgress = async (courseId: string): Promise<Record<string, boolean>> => {
+  if (!isSupabaseConfigured) return {};
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return {};
+
+    const { data: completed } = await supabase
+      .from('user_progress')
+      .select('chapter_id')
+      .eq('course_id', courseId)
+      .eq('user_id', user.id)
+      .eq('completed', true);
+
+    const progressMap: Record<string, boolean> = {};
+    (completed || []).forEach(item => {
+      progressMap[item.chapter_id] = true;
+    });
+    return progressMap;
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Get course progress percentage for current user
  */
 export const getCourseProgress = async (courseId: string): Promise<number> => {
   if (!isSupabaseConfigured) return 0;

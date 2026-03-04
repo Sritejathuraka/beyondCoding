@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar, Footer } from '../components';
-import { getCourseById, getCourseProgress, deleteCourse } from '../services/courseService';
+import { getCourseById, getChapterProgress, deleteCourse } from '../services/courseService';
 import { useAuth } from '../contexts/AuthContext';
 import type { Course } from '../types';
 
@@ -18,10 +18,10 @@ const CourseView = () => {
     if (!course || !id) return;
     if (window.confirm(`Are you sure you want to delete the course "${course.title}"? This will also delete all chapter associations. This action cannot be undone.`)) {
       setDeleting(true);
-      const success = await deleteCourse(id);
-      if (success) {
+      try {
+        await deleteCourse(id);
         navigate('/courses');
-      } else {
+      } catch {
         alert('Failed to delete course. Please try again.');
         setDeleting(false);
       }
@@ -35,7 +35,7 @@ const CourseView = () => {
         setCourse(found);
         if (found) {
           // Fetch progress from Supabase for logged-in users
-          const courseProgress = await getCourseProgress(found.id);
+          const courseProgress = await getChapterProgress(found.id);
           setProgress(courseProgress);
         }
       }
