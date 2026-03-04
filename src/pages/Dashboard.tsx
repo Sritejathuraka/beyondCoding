@@ -2,18 +2,20 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Navbar, Footer } from '../components';
 import { 
-  getArticles, 
+  getMyArticles, 
   deleteArticle, 
   type StoredArticle,
   formatDate 
 } from '../services/articleService';
 import { getCourses, deleteCourse, type Course } from '../services/courseService';
+import { useToast } from '../contexts/ToastContext';
 
 const Dashboard = () => {
   const [articles, setArticles] = useState<StoredArticle[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [filter, setFilter] = useState<'all' | 'published' | 'drafts'>('all');
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   useEffect(() => {
     loadData();
@@ -22,7 +24,7 @@ const Dashboard = () => {
   const loadData = async () => {
     setLoading(true);
     const [articlesData, coursesData] = await Promise.all([
-      getArticles(),
+      getMyArticles(),
       getCourses()
     ]);
     setArticles(articlesData);
@@ -32,15 +34,25 @@ const Dashboard = () => {
 
   const handleDelete = async (id: string, title: string) => {
     if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
-      await deleteArticle(id);
-      loadData();
+      try {
+        await deleteArticle(id);
+        toast.success('Article deleted');
+        loadData();
+      } catch (error) {
+        toast.error('Failed to delete article: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
     }
   };
 
   const handleDeleteCourse = async (id: string, title: string) => {
     if (window.confirm(`Are you sure you want to delete the course "${title}"?`)) {
-      await deleteCourse(id);
-      loadData();
+      try {
+        await deleteCourse(id);
+        toast.success('Course deleted');
+        loadData();
+      } catch (error) {
+        toast.error('Failed to delete course: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
     }
   };
 

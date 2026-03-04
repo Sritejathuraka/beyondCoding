@@ -11,18 +11,43 @@ const Hero = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+    
     const loadData = async () => {
-      const [featured, articles, courses] = await Promise.all([
-        getFeaturedArticle(),
-        getPublishedArticles(),
-        getPublishedCourses()
-      ]);
-      setFeaturedArticle(featured);
-      setArticleCount(articles.length);
-      setCourseCount(courses.length);
-      setLoading(false);
+      try {
+        console.log('[Hero] Starting parallel fetch...');
+        const start = Date.now();
+        
+        // Run fetches separately to see which one hangs
+        console.log('[Hero] Fetching featured...');
+        const featured = await getFeaturedArticle();
+        console.log('[Hero] Featured done:', Date.now() - start, 'ms');
+        
+        console.log('[Hero] Fetching articles...');
+        const articles = await getPublishedArticles();
+        console.log('[Hero] Articles done:', Date.now() - start, 'ms, count:', articles.length);
+        
+        console.log('[Hero] Fetching courses...');
+        const courses = await getPublishedCourses();
+        console.log('[Hero] Courses done:', Date.now() - start, 'ms, count:', courses.length);
+        
+        if (mounted) {
+          setFeaturedArticle(featured);
+          setArticleCount(articles.length);
+          setCourseCount(courses.length);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Hero load error:', error);
+        if (mounted) setLoading(false);
+      }
     };
+    
     loadData();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   return (

@@ -1,6 +1,5 @@
 import type { Article } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { notifySubscribers } from './subscriberService';
 
 const STORAGE_KEY = 'beyondcode_articles';
 
@@ -28,7 +27,10 @@ interface ArticleRow {
   updated_at: string;
 }
 
-// Convert database row to StoredArticle
+// ============================================
+// HELPERS
+// ============================================
+
 const rowToArticle = (row: ArticleRow): StoredArticle => ({
   id: row.id,
   title: row.title,
@@ -45,15 +47,14 @@ const rowToArticle = (row: ArticleRow): StoredArticle => ({
   userId: row.user_id || undefined,
 });
 
-// =============================================
-// LOCAL STORAGE FALLBACK (when Supabase unavailable)
-// =============================================
+// ============================================
+// LOCAL STORAGE FALLBACK
+// ============================================
 
 const getLocalArticles = (): StoredArticle[] => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return [];
   try {
-    return JSON.parse(stored);
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
   }
@@ -73,114 +74,140 @@ const saveLocalArticle = (article: Omit<StoredArticle, 'id' | 'createdAt' | 'upd
   return newArticle;
 };
 
-// =============================================
-// MAIN ARTICLE SERVICE (Supabase with fallback)
-// =============================================
+// ============================================
+// PUBLIC API
+// ============================================
 
-// Get all articles
-export const getArticles = async (): Promise<StoredArticle[]> => {
+/**
+ * Get all published articles
+ */
+export const getPublishedArticles = async (): Promise<StoredArticle[]> => {
   if (!isSupabaseConfigured) {
-    return getLocalArticles();
+    return getLocalArticles().filter(a => a.published);
   }
 
-  const { data, error } = await supabase
-    .from('articles')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('published', true)
+      .order('created_at', { ascending: false })
+      .abortSignal(controller.signal);
+    
+    clearTimeout(timeoutId);
 
-  if (error) {
-    console.error('Error fetching articles:', error);
-    return getLocalArticles(); // Fallback to local
-  }
-
-  return (data || []).map(rowToArticle);
-};
-
-// Get user's own articles (including unpublished)
-export const getMyArticles = async (): Promise<StoredArticle[]> => {
-  if (!isSupabaseConfigured) {
-    return getLocalArticles();
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  const { data, error } = await supabase
-    .from('articles')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching my articles:', error);
+    if (error) throw error;
+    return (data || []).map(rowToArticle);
+  } catch (error) {
+    console.error('Failed to fetch articles:', error);
     return [];
   }
-
-  return (data || []).map(rowToArticle);
 };
 
-// Get a single article by ID
-export const getArticleById = async (id: string): Promise<StoredArticle | null> => {
-  if (!isSupabaseConfigured) {
-    const articles = getLocalArticles();
-    return articles.find(article => article.id === id) || null;
-  }
-
-  const { data, error } = await supabase
-    .from('articles')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error) {
-    console.error('Error fetching article:', error);
-    // Fallback to localStorage
-    const articles = getLocalArticles();
-    return articles.find(article => article.id === id) || null;
-  }
-
-  return data ? rowToArticle(data) : null;
-};
-
-// Get featured article (most recent featured or first published)
+/**
+ * Get featured article for homepage
+ */
 export const getFeaturedArticle = async (): Promise<StoredArticle | null> => {
   if (!isSupabaseConfigured) {
     const articles = getLocalArticles();
     return articles.find(a => a.featured && a.published) || articles.find(a => a.published) || null;
   }
 
-  // First try to get a featured article
-  const { data: featured, error: featuredError } = await supabase
-    .from('articles')
-    .select('*')
-    .eq('featured', true)
-    .eq('published', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
+  try {
+    // Add timeout to prevent hanging on auth lock
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    // Try featured first
+    const { data: featured } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('featured', true)
+      .eq('published', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .abortSignal(controller.signal);
 
-  if (!featuredError && featured) {
-    return rowToArticle(featured);
-  }
+    if (featured && featured.length > 0) {
+      clearTimeout(timeoutId);
+      return rowToArticle(featured[0]);
+    }
 
-  // Fallback to most recent published article
-  const { data, error } = await supabase
-    .from('articles')
-    .select('*')
-    .eq('published', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
+    // Fallback to most recent
+    const { data } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('published', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .abortSignal(controller.signal);
+    
+    clearTimeout(timeoutId);
 
-  if (error) {
-    console.error('Error fetching featured article:', error);
+    return data && data.length > 0 ? rowToArticle(data[0]) : null;
+  } catch (error) {
+    console.error('Failed to fetch featured article:', error);
     return null;
   }
-
-  return data ? rowToArticle(data) : null;
 };
 
-// Save a new article
+/**
+ * Get article by ID
+ */
+export const getArticleById = async (id: string): Promise<StoredArticle | null> => {
+  if (!isSupabaseConfigured) {
+    return getLocalArticles().find(a => a.id === id) || null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data ? rowToArticle(data) : null;
+  } catch (error) {
+    console.error('Failed to fetch article:', error);
+    return null;
+  }
+};
+
+/**
+ * Get current user's articles (including drafts)
+ */
+export const getMyArticles = async (): Promise<StoredArticle[]> => {
+  if (!isSupabaseConfigured) {
+    return getLocalArticles();
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(rowToArticle);
+  } catch (error) {
+    console.error('Failed to fetch my articles:', error);
+    return [];
+  }
+};
+
+/**
+ * Save a new article
+ * @throws Error if save fails
+ */
 export const saveArticle = async (
   article: Omit<StoredArticle, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<StoredArticle> => {
@@ -189,6 +216,9 @@ export const saveArticle = async (
   }
 
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('You must be logged in to save articles');
+  }
 
   const { data, error } = await supabase
     .from('articles')
@@ -201,42 +231,34 @@ export const saveArticle = async (
       read_time: article.readTime,
       featured: article.featured || false,
       published: article.published,
-      user_id: user?.id,
+      user_id: user.id,
     })
-    .select()
-    .single();
+    .select();
 
   if (error) {
-    console.error('Error saving article:', error);
-    // Fallback to localStorage
-    return saveLocalArticle(article);
+    console.error('Save article error:', error);
+    throw new Error(error.message || 'Failed to save article');
   }
 
-  const savedArticle = rowToArticle(data);
-
-  // Notify subscribers if article is published
-  if (article.published) {
-    notifySubscribers(
-      'article',
-      savedArticle.id,
-      savedArticle.title,
-      savedArticle.description || '',
-      `/article/${savedArticle.id}`
-    ).catch(err => console.error('Failed to notify subscribers:', err));
+  if (!data || data.length === 0) {
+    throw new Error('Failed to save article - no data returned');
   }
 
-  return savedArticle;
+  return rowToArticle(data[0]);
 };
 
-// Update an existing article
+/**
+ * Update an existing article
+ * @throws Error if update fails
+ */
 export const updateArticle = async (
   id: string,
   updates: Partial<StoredArticle>
-): Promise<StoredArticle | null> => {
+): Promise<StoredArticle> => {
   if (!isSupabaseConfigured) {
     const articles = getLocalArticles();
-    const index = articles.findIndex(article => article.id === id);
-    if (index === -1) return null;
+    const index = articles.findIndex(a => a.id === id);
+    if (index === -1) throw new Error('Article not found');
     articles[index] = { ...articles[index], ...updates, updatedAt: new Date().toISOString() };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
     return articles[index];
@@ -256,38 +278,33 @@ export const updateArticle = async (
     .from('articles')
     .update(updateData)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
 
   if (error) {
-    console.error('Error updating article:', error);
-    return null;
+    console.error('Update article error:', error);
+    throw new Error(error.message || 'Failed to update article');
   }
 
-  const updatedArticle = data ? rowToArticle(data) : null;
-
-  // Notify subscribers if article is being published
-  if (updatedArticle && updates.published === true) {
-    notifySubscribers(
-      'article',
-      updatedArticle.id,
-      updatedArticle.title,
-      updatedArticle.description || '',
-      `/article/${updatedArticle.id}`
-    ).catch(err => console.error('Failed to notify subscribers:', err));
+  if (!data || data.length === 0) {
+    throw new Error('Article not found or you do not have permission');
   }
 
-  return updatedArticle;
+  return rowToArticle(data[0]);
 };
 
-// Delete an article
-export const deleteArticle = async (id: string): Promise<boolean> => {
+/**
+ * Delete an article
+ * @throws Error if delete fails
+ */
+export const deleteArticle = async (id: string): Promise<void> => {
   if (!isSupabaseConfigured) {
     const articles = getLocalArticles();
-    const filtered = articles.filter(article => article.id !== id);
-    if (filtered.length === articles.length) return false;
+    const filtered = articles.filter(a => a.id !== id);
+    if (filtered.length === articles.length) {
+      throw new Error('Article not found');
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    return true;
+    return;
   }
 
   const { error, data } = await supabase
@@ -297,54 +314,29 @@ export const deleteArticle = async (id: string): Promise<boolean> => {
     .select();
 
   if (error) {
-    console.error('Error deleting article:', error);
-    return false;
+    console.error('Delete article error:', error);
+    throw new Error(error.message || 'Failed to delete article');
   }
 
-  // Check if any rows were deleted (RLS may silently block)
   if (!data || data.length === 0) {
-    console.error('No article deleted - permission denied or article not found');
-    return false;
+    throw new Error('Article not found or you do not have permission');
   }
-
-  console.log('Article deleted successfully:', data);
-  return true;
 };
 
-// Get published articles only
-export const getPublishedArticles = async (): Promise<StoredArticle[]> => {
-  if (!isSupabaseConfigured) {
-    return getLocalArticles().filter(article => article.published);
-  }
+// ============================================
+// UTILITIES
+// ============================================
 
-  const { data, error } = await supabase
-    .from('articles')
-    .select('*')
-    .eq('published', true)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching published articles:', error);
-    return [];
-  }
-
-  return (data || []).map(rowToArticle);
-};
-
-// Format date for display
 export const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { 
+  return new Date(dateString).toLocaleDateString('en-US', { 
     month: 'short', 
     day: 'numeric', 
     year: 'numeric' 
   });
 };
 
-// Calculate read time
 export const calculateReadTime = (content: string): string => {
-  const wordsPerMinute = 200;
   const words = content.trim().split(/\s+/).length;
-  const minutes = Math.ceil(words / wordsPerMinute);
+  const minutes = Math.ceil(words / 200);
   return `${minutes} min read`;
 };

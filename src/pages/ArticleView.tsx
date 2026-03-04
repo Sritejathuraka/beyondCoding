@@ -27,14 +27,45 @@ const ArticleView = () => {
   };
 
   useEffect(() => {
+    let mounted = true;
+    
     const loadArticle = async () => {
+      console.log('ArticleView: Loading article with id:', id);
       if (id) {
-        const found = await getArticleById(id);
-        setArticle(found);
+        try {
+          const found = await getArticleById(id);
+          console.log('ArticleView: Loaded article:', found);
+          if (mounted) {
+            setArticle(found);
+            setLoading(false);
+          }
+        } catch (error) {
+          console.error('ArticleView: Error loading article:', error);
+          if (mounted) {
+            setLoading(false);
+          }
+        }
+      } else {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     };
+    
     loadArticle();
+    
+    // Safety timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('ArticleView: Loading timeout - forcing completion');
+        setLoading(false);
+      }
+    }, 5000);
+    
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+    };
   }, [id]);
 
   if (loading) {

@@ -1,12 +1,14 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { HomePage, ArticleEditor, ArticleView, Dashboard, CourseEditor, CourseView, CourseChapterView, Login, ForgotPassword, CoursesPage, BlogsPage, AboutPage, ContactPage } from './pages';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <Router>
       <AuthProvider>
+        <ToastProvider>
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<HomePage />} />
@@ -38,6 +40,7 @@ function App() {
             <ProtectedRoute requireAdmin><CourseEditor /></ProtectedRoute>
           } />
         </Routes>
+        </ToastProvider>
       </AuthProvider>
     </Router>
   );

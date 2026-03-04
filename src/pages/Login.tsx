@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Navbar, Footer } from '../components';
+import { useToast } from '../contexts/ToastContext';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -10,8 +11,16 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +34,18 @@ const Login = () => {
 
       if (error) {
         setError(error.message);
+        toast.error(error.message);
       } else {
         if (isSignUp) {
+          toast.success('Check your email to confirm your account!');
           setError('Check your email to confirm your account!');
         } else {
-          navigate('/dashboard');
+          toast.success('Welcome back!');
+          // Navigation handled by useEffect when user state updates
         }
       }
     } catch (err) {
+      toast.error('An unexpected error occurred');
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);

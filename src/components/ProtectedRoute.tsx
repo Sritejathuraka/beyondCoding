@@ -7,8 +7,9 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
-  const { user, loading, canWrite } = useAuth();
+  const { user, loading, canWrite, profileLoading } = useAuth();
 
+  // Show loading while auth is initializing
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center">
@@ -20,6 +21,16 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
   // Must be logged in
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // If admin access required, wait for profile to load before checking
+  if (requireAdmin && profileLoading) {
+    // Profile still loading - show spinner
+    return (
+      <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   // If admin/author access is required, check canWrite

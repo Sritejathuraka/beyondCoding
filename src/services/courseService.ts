@@ -1,14 +1,11 @@
 import type { Course, CourseChapter } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { notifySubscribers } from './subscriberService';
 
-// Re-export types for convenience
 export type { Course, CourseChapter };
 
 const COURSES_KEY = 'beyondcode_courses';
-const PROGRESS_KEY = 'beyondcode_course_progress';
 
-// Database row types (snake_case from Supabase)
+// Database row types
 interface CourseRow {
   id: string;
   title: string;
@@ -31,7 +28,10 @@ interface ChapterRow {
   chapter_order: number;
 }
 
-// Convert database row to Course
+// ============================================
+// HELPERS
+// ============================================
+
 const rowToCourse = (row: CourseRow, chapters: CourseChapter[] = []): Course => ({
   id: row.id,
   title: row.title,
@@ -54,15 +54,14 @@ const rowToChapter = (row: ChapterRow, completed = false): CourseChapter => ({
   completed,
 });
 
-// =============================================
-// LOCAL STORAGE HELPERS
-// =============================================
+// ============================================
+// LOCAL STORAGE FALLBACK
+// ============================================
 
 const getLocalCourses = (): Course[] => {
-  const stored = localStorage.getItem(COURSES_KEY);
-  if (!stored) return [];
   try {
-    return JSON.parse(stored);
+    const stored = localStorage.getItem(COURSES_KEY);
+    return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
   }
@@ -72,200 +71,170 @@ const saveLocalCourses = (courses: Course[]) => {
   localStorage.setItem(COURSES_KEY, JSON.stringify(courses));
 };
 
-interface CourseProgress {
-  [courseId: string]: {
-    [chapterId: string]: boolean;
-  };
-}
+// ============================================
+// PUBLIC API
+// ============================================
 
-const getLocalProgress = (): CourseProgress => {
-  const stored = localStorage.getItem(PROGRESS_KEY);
-  if (!stored) return {};
+/**
+ * Get all published courses
+ */
+export const getPublishedCourses = async (): Promise<Course[]> => {
+  if (!isSupabaseConfigured) {
+    return getLocalCourses().filter(c => c.published);
+  }
+
   try {
-    return JSON.parse(stored);
-  } catch {
-    return {};
+    // Add timeout to prevent hanging on auth lock
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const { data: coursesData, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('published', true)
+      .order('created_at', { ascending: false })
+      .abortSignal(controller.signal);
+
+    if (error) throw error;
+    if (!coursesData || coursesData.length === 0) {
+      clearTimeout(timeoutId);
+      return [];
+    }
+
+    // Fetch chapters
+    const courseIds = coursesData.map(c => c.id);
+    const { data: chaptersData } = await supabase
+      .from('course_chapters')
+      .select('*')
+      .in('course_id', courseIds)
+      .order('chapter_order', { ascending: true })
+      .abortSignal(controller.signal);
+    
+    clearTimeout(timeoutId);
+
+    const chaptersByCourse: Record<string, CourseChapter[]> = {};
+    (chaptersData || []).forEach((ch: ChapterRow) => {
+      if (!chaptersByCourse[ch.course_id]) {
+        chaptersByCourse[ch.course_id] = [];
+      }
+      chaptersByCourse[ch.course_id].push(rowToChapter(ch));
+    });
+
+    return coursesData.map((row: CourseRow) => 
+      rowToCourse(row, chaptersByCourse[row.id] || [])
+    );
+  } catch (error) {
+    console.error('Failed to fetch courses:', error);
+    return [];
   }
 };
 
-const saveLocalProgress = (progress: CourseProgress) => {
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
-};
-
-// =============================================
-// MAIN COURSE SERVICE (Supabase with localStorage fallback)
-// =============================================
-
-// Get all courses
+/**
+ * Get all courses (including unpublished for admin)
+ */
 export const getCourses = async (): Promise<Course[]> => {
   if (!isSupabaseConfigured) {
     return getLocalCourses();
   }
 
-  const { data: coursesData, error } = await supabase
-    .from('courses')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const { data: coursesData, error } = await supabase
+      .from('courses')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .abortSignal(controller.signal);
 
-  if (error) {
-    console.error('Error fetching courses:', error);
+    if (error) throw error;
+    if (!coursesData || coursesData.length === 0) {
+      clearTimeout(timeoutId);
+      return [];
+    }
+
+    const courseIds = coursesData.map(c => c.id);
+    const { data: chaptersData } = await supabase
+      .from('course_chapters')
+      .select('*')
+      .in('course_id', courseIds)
+      .order('chapter_order', { ascending: true })
+      .abortSignal(controller.signal);
+    
+    clearTimeout(timeoutId);
+
+    const chaptersByCourse: Record<string, CourseChapter[]> = {};
+    (chaptersData || []).forEach((ch: ChapterRow) => {
+      if (!chaptersByCourse[ch.course_id]) {
+        chaptersByCourse[ch.course_id] = [];
+      }
+      chaptersByCourse[ch.course_id].push(rowToChapter(ch));
+    });
+
+    return coursesData.map((row: CourseRow) => 
+      rowToCourse(row, chaptersByCourse[row.id] || [])
+    );
+  } catch (error) {
+    console.error('Failed to fetch all courses:', error);
     return getLocalCourses();
   }
-
-  // Fetch all chapters
-  const courseIds = (coursesData || []).map(c => c.id);
-  if (courseIds.length === 0) return [];
-
-  const { data: chaptersData } = await supabase
-    .from('course_chapters')
-    .select('*')
-    .in('course_id', courseIds)
-    .order('chapter_order', { ascending: true });
-
-  // Group chapters by course
-  const chaptersByCourse: Record<string, CourseChapter[]> = {};
-  (chaptersData || []).forEach((ch: ChapterRow) => {
-    if (!chaptersByCourse[ch.course_id]) {
-      chaptersByCourse[ch.course_id] = [];
-    }
-    chaptersByCourse[ch.course_id].push(rowToChapter(ch));
-  });
-
-  return (coursesData || []).map((row: CourseRow) => 
-    rowToCourse(row, chaptersByCourse[row.id] || [])
-  );
 };
 
-// Sync version for backwards compatibility
-export const getCoursesSync = (): Course[] => {
-  return getLocalCourses();
-};
-
-// Get published courses only
-export const getPublishedCourses = async (): Promise<Course[]> => {
-  if (!isSupabaseConfigured) {
-    return getLocalCourses().filter(course => course.published);
-  }
-
-  const { data: coursesData, error } = await supabase
-    .from('courses')
-    .select('*')
-    .eq('published', true)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching published courses:', error);
-    return getLocalCourses().filter(c => c.published);
-  }
-
-  const courseIds = (coursesData || []).map(c => c.id);
-  if (courseIds.length === 0) return [];
-
-  const { data: chaptersData } = await supabase
-    .from('course_chapters')
-    .select('*')
-    .in('course_id', courseIds)
-    .order('chapter_order', { ascending: true });
-
-  const chaptersByCourse: Record<string, CourseChapter[]> = {};
-  (chaptersData || []).forEach((ch: ChapterRow) => {
-    if (!chaptersByCourse[ch.course_id]) {
-      chaptersByCourse[ch.course_id] = [];
-    }
-    chaptersByCourse[ch.course_id].push(rowToChapter(ch));
-  });
-
-  return (coursesData || []).map((row: CourseRow) => 
-    rowToCourse(row, chaptersByCourse[row.id] || [])
-  );
-};
-
-// Get course by ID
+/**
+ * Get course by ID
+ */
 export const getCourseById = async (id: string): Promise<Course | null> => {
   if (!isSupabaseConfigured) {
-    const courses = getLocalCourses();
-    const course = courses.find(c => c.id === id);
-    if (!course) return null;
-    
-    // Apply local progress
-    const progress = getLocalProgress()[id] || {};
-    course.chapters = course.chapters.map(ch => ({
-      ...ch,
-      completed: progress[ch.id] || false,
-    }));
-    return course;
+    return getLocalCourses().find(c => c.id === id) || null;
   }
 
-  const { data: courseData, error } = await supabase
-    .from('courses')
-    .select('*')
-    .eq('id', id)
-    .single();
+  try {
+    const { data: courseData, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-  if (error || !courseData) {
-    console.error('Error fetching course:', error);
-    // Fallback to local
-    const courses = getLocalCourses();
-    return courses.find(c => c.id === id) || null;
-  }
+    if (error) throw error;
+    if (!courseData) return null;
 
-  // Fetch chapters
-  const { data: chaptersData } = await supabase
-    .from('course_chapters')
-    .select('*')
-    .eq('course_id', id)
-    .order('chapter_order', { ascending: true });
-
-  // Fetch user progress
-  const { data: { user } } = await supabase.auth.getUser();
-  let completedChapterIds: string[] = [];
-  
-  if (user) {
-    const { data: progressData } = await supabase
-      .from('user_progress')
-      .select('chapter_id')
+    // Fetch chapters
+    const { data: chaptersData } = await supabase
+      .from('course_chapters')
+      .select('*')
       .eq('course_id', id)
-      .eq('user_id', user.id)
-      .eq('completed', true);
+      .order('chapter_order', { ascending: true });
+
+    // Fetch user progress
+    const { data: { user } } = await supabase.auth.getUser();
+    let completedChapterIds: string[] = [];
     
-    completedChapterIds = (progressData || []).map(p => p.chapter_id);
+    if (user) {
+      const { data: progressData } = await supabase
+        .from('user_progress')
+        .select('chapter_id')
+        .eq('course_id', id)
+        .eq('user_id', user.id)
+        .eq('completed', true);
+      
+      completedChapterIds = (progressData || []).map(p => p.chapter_id);
+    }
+
+    const chapters = (chaptersData || []).map((ch: ChapterRow) => 
+      rowToChapter(ch, completedChapterIds.includes(ch.id))
+    );
+
+    return rowToCourse(courseData, chapters);
+  } catch (error) {
+    console.error('Failed to fetch course:', error);
+    return null;
   }
-
-  const chapters = (chaptersData || []).map((ch: ChapterRow) => 
-    rowToChapter(ch, completedChapterIds.includes(ch.id))
-  );
-
-  return rowToCourse(courseData, chapters);
 };
 
-// Sync version for backwards compatibility  
-export const getCourseByIdSync = (id: string): Course | null => {
-  const courses = getLocalCourses();
-  return courses.find(c => c.id === id) || null;
-};
-
-// Get course containing a specific article
-export const getCourseByArticleId = async (articleId: string): Promise<Course | null> => {
-  if (!isSupabaseConfigured) {
-    const courses = getLocalCourses();
-    return courses.find(course => 
-      course.chapters.some(chapter => chapter.articleId === articleId)
-    ) || null;
-  }
-
-  // Find the chapter first
-  const { data: chapterData } = await supabase
-    .from('course_chapters')
-    .select('course_id')
-    .eq('article_id', articleId)
-    .single();
-
-  if (!chapterData) return null;
-
-  return getCourseById(chapterData.course_id);
-};
-
-// Save a new course
+/**
+ * Save a new course
+ * @throws Error if save fails
+ */
 export const saveCourse = async (
   course: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<Course> => {
@@ -284,6 +253,9 @@ export const saveCourse = async (
   }
 
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('You must be logged in to create courses');
+  }
 
   const { data, error } = await supabase
     .from('courses')
@@ -295,53 +267,47 @@ export const saveCourse = async (
       author: course.author,
       estimated_time: course.estimatedTime,
       published: course.published,
-      user_id: user?.id,
+      user_id: user.id,
     })
-    .select()
-    .single();
+    .select();
 
   if (error) {
-    console.error('Error saving course:', error);
-    throw new Error('Failed to save course');
+    console.error('Save course error:', error);
+    throw new Error(error.message || 'Failed to save course');
   }
 
+  if (!data || data.length === 0) {
+    throw new Error('Failed to save course - no data returned');
+  }
+
+  const courseData = data[0];
+
   // Insert chapters
-  if (course.chapters.length > 0) {
+  if (course.chapters && course.chapters.length > 0) {
     const chaptersToInsert = course.chapters.map((ch, index) => ({
-      course_id: data.id,
+      course_id: courseData.id,
       article_id: ch.articleId,
       title: ch.title,
       chapter_order: ch.order || index + 1,
     }));
-
     await supabase.from('course_chapters').insert(chaptersToInsert);
   }
 
-  const savedCourse = rowToCourse(data, course.chapters);
-
-  // Notify subscribers if course is published
-  if (course.published) {
-    notifySubscribers(
-      'course',
-      savedCourse.id,
-      savedCourse.title,
-      savedCourse.description || '',
-      `/course/${savedCourse.id}`
-    ).catch(err => console.error('Failed to notify subscribers:', err));
-  }
-
-  return savedCourse;
+  return rowToCourse(courseData, course.chapters || []);
 };
 
-// Update a course
+/**
+ * Update an existing course
+ * @throws Error if update fails
+ */
 export const updateCourse = async (
   id: string, 
   updates: Partial<Course>
-): Promise<Course | null> => {
+): Promise<Course> => {
   if (!isSupabaseConfigured) {
     const courses = getLocalCourses();
     const index = courses.findIndex(c => c.id === id);
-    if (index === -1) return null;
+    if (index === -1) throw new Error('Course not found');
     courses[index] = { ...courses[index], ...updates, updatedAt: new Date().toISOString() };
     saveLocalCourses(courses);
     return courses[index];
@@ -359,12 +325,15 @@ export const updateCourse = async (
     .from('courses')
     .update(updateData)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
 
   if (error) {
-    console.error('Error updating course:', error);
-    return null;
+    console.error('Update course error:', error);
+    throw new Error(error.message || 'Failed to update course');
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Course not found or you do not have permission');
   }
 
   // Update chapters if provided
@@ -382,43 +351,27 @@ export const updateCourse = async (
     }
   }
 
-  const updatedCourse = data ? rowToCourse(data, updates.chapters || []) : null;
-
-  // Notify subscribers if course is being published
-  if (updatedCourse && updates.published === true) {
-    notifySubscribers(
-      'course',
-      updatedCourse.id,
-      updatedCourse.title,
-      updatedCourse.description || '',
-      `/course/${updatedCourse.id}`
-    ).catch(err => console.error('Failed to notify subscribers:', err));
-  }
-
-  return updatedCourse;
+  return rowToCourse(data[0], updates.chapters || []);
 };
 
-// Delete a course
-export const deleteCourse = async (id: string): Promise<boolean> => {
+/**
+ * Delete a course
+ * @throws Error if delete fails
+ */
+export const deleteCourse = async (id: string): Promise<void> => {
   if (!isSupabaseConfigured) {
     const courses = getLocalCourses();
     const filtered = courses.filter(c => c.id !== id);
-    if (filtered.length === courses.length) return false;
+    if (filtered.length === courses.length) {
+      throw new Error('Course not found');
+    }
     saveLocalCourses(filtered);
-    return true;
+    return;
   }
 
-  // First delete associated chapters
-  const { error: chaptersError } = await supabase
-    .from('course_chapters')
-    .delete()
-    .eq('course_id', id);
-  
-  if (chaptersError) {
-    console.error('Error deleting course chapters:', chaptersError);
-  }
+  // Delete chapters first
+  await supabase.from('course_chapters').delete().eq('course_id', id);
 
-  // Then delete the course
   const { error, data } = await supabase
     .from('courses')
     .delete()
@@ -426,148 +379,62 @@ export const deleteCourse = async (id: string): Promise<boolean> => {
     .select();
 
   if (error) {
-    console.error('Error deleting course:', error);
-    return false;
+    console.error('Delete course error:', error);
+    throw new Error(error.message || 'Failed to delete course');
   }
 
-  // Check if any rows were deleted (RLS may silently block)
   if (!data || data.length === 0) {
-    console.error('No course deleted - permission denied or course not found');
-    return false;
+    throw new Error('Course not found or you do not have permission');
   }
-
-  console.log('Course deleted successfully:', data);
-  return true;
 };
 
-// =============================================
-// PROGRESS TRACKING
-// =============================================
-
-export const getProgress = (): CourseProgress => {
-  return getLocalProgress();
-};
-
-export const getCourseProgress = async (courseId: string): Promise<Record<string, boolean>> => {
-  if (!isSupabaseConfigured) {
-    return getLocalProgress()[courseId] || {};
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return {};
-
-  const { data } = await supabase
-    .from('user_progress')
-    .select('chapter_id, completed')
-    .eq('course_id', courseId)
-    .eq('user_id', user.id);
-
-  const progress: Record<string, boolean> = {};
-  (data || []).forEach(p => {
-    progress[p.chapter_id] = p.completed;
-  });
-  return progress;
-};
-
-// Sync version for backwards compatibility
-export const getCourseProgressSync = (courseId: string): Record<string, boolean> => {
-  return getLocalProgress()[courseId] || {};
-};
-
+/**
+ * Mark a chapter as completed
+ */
 export const markChapterComplete = async (
   courseId: string, 
   chapterId: string
 ): Promise<void> => {
-  if (!isSupabaseConfigured) {
-    const progress = getLocalProgress();
-    if (!progress[courseId]) progress[courseId] = {};
-    progress[courseId][chapterId] = true;
-    saveLocalProgress(progress);
-    return;
-  }
+  if (!isSupabaseConfigured) return;
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    // Fallback to local for non-authenticated users
-    const progress = getLocalProgress();
-    if (!progress[courseId]) progress[courseId] = {};
-    progress[courseId][chapterId] = true;
-    saveLocalProgress(progress);
-    return;
+  if (!user) return;
+
+  await supabase.from('user_progress').upsert({
+    user_id: user.id,
+    course_id: courseId,
+    chapter_id: chapterId,
+    completed: true,
+    completed_at: new Date().toISOString(),
+  });
+};
+
+/**
+ * Get course progress for current user
+ */
+export const getCourseProgress = async (courseId: string): Promise<number> => {
+  if (!isSupabaseConfigured) return 0;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 0;
+
+    const { data: chapters } = await supabase
+      .from('course_chapters')
+      .select('id')
+      .eq('course_id', courseId);
+
+    if (!chapters || chapters.length === 0) return 0;
+
+    const { data: completed } = await supabase
+      .from('user_progress')
+      .select('chapter_id')
+      .eq('course_id', courseId)
+      .eq('user_id', user.id)
+      .eq('completed', true);
+
+    return Math.round(((completed?.length || 0) / chapters.length) * 100);
+  } catch {
+    return 0;
   }
-
-  await supabase
-    .from('user_progress')
-    .upsert({
-      user_id: user.id,
-      course_id: courseId,
-      chapter_id: chapterId,
-      completed: true,
-      completed_at: new Date().toISOString(),
-    }, {
-      onConflict: 'user_id,chapter_id',
-    });
-};
-
-export const markChapterIncomplete = async (
-  courseId: string, 
-  chapterId: string
-): Promise<void> => {
-  if (!isSupabaseConfigured) {
-    const progress = getLocalProgress();
-    if (progress[courseId]) {
-      delete progress[courseId][chapterId];
-      saveLocalProgress(progress);
-    }
-    return;
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    const progress = getLocalProgress();
-    if (progress[courseId]) {
-      delete progress[courseId][chapterId];
-      saveLocalProgress(progress);
-    }
-    return;
-  }
-
-  await supabase
-    .from('user_progress')
-    .update({ completed: false, completed_at: null })
-    .eq('user_id', user.id)
-    .eq('chapter_id', chapterId);
-};
-
-export const getCourseCompletionPercent = async (course: Course): Promise<number> => {
-  if (course.chapters.length === 0) return 0;
-  
-  const progress = await getCourseProgress(course.id);
-  const completedCount = Object.values(progress).filter(Boolean).length;
-  return Math.round((completedCount / course.chapters.length) * 100);
-};
-
-// Sync version
-export const getCourseCompletionPercentSync = (course: Course): number => {
-  const progress = getCourseProgressSync(course.id);
-  const completedCount = Object.values(progress).filter(Boolean).length;
-  return Math.round((completedCount / course.chapters.length) * 100) || 0;
-};
-
-// Get next/previous chapters
-export const getAdjacentChapters = (course: Course, currentArticleId: string): {
-  prev: CourseChapter | null;
-  next: CourseChapter | null;
-  current: CourseChapter | null;
-  currentIndex: number;
-} => {
-  const sortedChapters = [...course.chapters].sort((a, b) => a.order - b.order);
-  const currentIndex = sortedChapters.findIndex(ch => ch.articleId === currentArticleId);
-  
-  return {
-    prev: currentIndex > 0 ? sortedChapters[currentIndex - 1] : null,
-    next: currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null,
-    current: currentIndex >= 0 ? sortedChapters[currentIndex] : null,
-    currentIndex,
-  };
 };

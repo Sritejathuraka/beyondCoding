@@ -9,7 +9,14 @@ if (!isSupabaseConfigured) {
   console.warn('Missing Supabase environment variables. Auth features will not work.');
 }
 
-// Create client only if we have valid credentials, otherwise create a dummy that won't crash
+// Create client with proper auth config to prevent lock issues
 export const supabase: SupabaseClient = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
+    })
   : createClient('https://placeholder.supabase.co', 'placeholder-key');

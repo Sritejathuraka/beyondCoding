@@ -17,6 +17,7 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  profileLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -44,6 +45,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // Fetch user profile from profiles table
   const fetchProfile = async (userId: string) => {
@@ -70,39 +72,56 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return;
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        const userProfile = await fetchProfile(session.user.id);
-        setProfile(userProfile);
+    let mounted = true;
+    
+    // Safety timeout - if nothing responds in 3 seconds, stop loading
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('Auth initialization timeout - proceeding without session');
+        setLoading(false);
       }
-      
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    }, 3000);
 
-    // Listen for auth changes
+    // Set up auth state listener FIRST (this is the reliable source)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
+        
+        clearTimeout(timeout);
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          const userProfile = await fetchProfile(session.user.id);
-          setProfile(userProfile);
+          // Fetch profile (track loading state)
+          setProfileLoading(true);
+          fetchProfile(session.user.id).then((userProfile) => {
+            if (mounted) {
+              setProfile(userProfile);
+              setProfileLoading(false);
+            }
+          }).catch(() => {
+            if (mounted) setProfileLoading(false);
+          });
         } else {
           setProfile(null);
+          setProfileLoading(false);
         }
         
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Try to get initial session (but don't block on it)
+    // The onAuthStateChange callback will fire with the session
+    supabase.auth.getSession().catch((err) => {
+      console.warn('getSession error (using onAuthStateChange instead):', err);
+    });
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -148,14 +167,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // Check role from profile
+  // Only admin users can write/publish articles
   const isAdmin = profile?.role === 'admin';
-  const canWrite = profile?.role === 'admin' || profile?.role === 'author';
+  const canWrite = isAdmin;
 
   const value = {
     user,
     session,
     profile,
     loading,
+    profileLoading,
     signIn,
     signUp,
     signOut,

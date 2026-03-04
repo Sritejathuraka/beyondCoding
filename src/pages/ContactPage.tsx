@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navbar, Footer } from '../components';
 import { submitContactForm } from '../services/contactService';
+import { useToast } from '../contexts/ToastContext';
 
 const ContactPage = () => {
   const [formData, setFormData] = useState({
@@ -11,11 +12,13 @@ const ContactPage = () => {
   });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const toast = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.email || !formData.message) {
+      toast.warning('Please fill in all required fields');
       setErrorMessage('Please fill in all required fields');
       setStatus('error');
       return;
@@ -25,9 +28,11 @@ const ContactPage = () => {
     
     try {
       await submitContactForm(formData);
+      toast.success('Message sent successfully!');
       setStatus('success');
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (error) {
+      toast.error('Failed to send message. Please try again.');
       setErrorMessage('Failed to send message. Please try again.');
       setStatus('error');
     }

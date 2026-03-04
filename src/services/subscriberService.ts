@@ -9,34 +9,43 @@ export interface Subscriber {
 }
 
 // Subscribe a new email
+// NOTE: Enable after creating 'subscribers' table (run supabase/newsletter.sql)
 export const subscribe = async (email: string, name?: string): Promise<{ success: boolean; error?: string }> => {
+  // Return friendly message until table is created
+  return { success: false, error: 'Newsletter coming soon! Check back later.' };
+  
+  /* Uncomment after creating the subscribers table:
   if (!isSupabaseConfigured) {
     return { success: false, error: 'Newsletter service not configured' };
   }
 
-  // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     return { success: false, error: 'Please enter a valid email address' };
   }
 
-  const { error } = await supabase
-    .from('subscribers')
-    .insert({
-      email: email.toLowerCase().trim(),
-      name: name?.trim() || null,
-      verified: true, // Auto-verify for now (can add email verification later)
-    });
+  try {
+    const { error } = await supabase
+      .from('subscribers')
+      .insert({
+        email: email.toLowerCase().trim(),
+        name: name?.trim() || null,
+        verified: true,
+      });
 
-  if (error) {
-    if (error.code === '23505') { // Unique constraint violation
-      return { success: false, error: 'This email is already subscribed!' };
+    if (error) {
+      if (error.code === '23505') {
+        return { success: false, error: 'This email is already subscribed!' };
+      }
+      console.error('Error subscribing:', error);
+      return { success: false, error: 'Failed to subscribe. Please try again.' };
     }
-    console.error('Error subscribing:', error);
+
+    return { success: true };
+  } catch {
     return { success: false, error: 'Failed to subscribe. Please try again.' };
   }
-
-  return { success: true };
+  */
 };
 
 // Unsubscribe an email
@@ -59,20 +68,33 @@ export const unsubscribe = async (email: string): Promise<{ success: boolean; er
 };
 
 // Get subscriber count (for display)
+// NOTE: Enable this after creating the 'subscribers' table in Supabase
+// Run supabase/newsletter.sql to create the table
 export const getSubscriberCount = async (): Promise<number> => {
+  // Return 0 until subscribers table is created
+  // Remove this line after running newsletter.sql in Supabase
+  return 0;
+  
+  /* Uncomment after creating the subscribers table:
   if (!isSupabaseConfigured) {
     return 0;
   }
 
-  const { data, error } = await supabase
-    .rpc('get_subscriber_count');
+  try {
+    const { count, error } = await supabase
+      .from('subscribers')
+      .select('*', { count: 'exact', head: true })
+      .is('unsubscribed_at', null);
 
-  if (error) {
-    console.error('Error getting subscriber count:', error);
+    if (error) {
+      return 0;
+    }
+
+    return count || 0;
+  } catch {
     return 0;
   }
-
-  return data || 0;
+  */
 };
 
 // Notify subscribers about new content (called from Edge Function)

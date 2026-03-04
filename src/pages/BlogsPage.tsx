@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Navbar, Footer } from '../components';
-import { getArticles, type StoredArticle } from '../services/articleService';
+import { getPublishedArticles, type StoredArticle } from '../services/articleService';
 
 const BlogsPage = () => {
   const [articles, setArticles] = useState<StoredArticle[]>([]);
@@ -10,7 +10,7 @@ const BlogsPage = () => {
 
   useEffect(() => {
     const loadArticles = async () => {
-      const allArticles = await getArticles();
+      const allArticles = await getPublishedArticles();
       const published = allArticles.filter(a => a.published);
       setArticles(published);
       setLoading(false);

@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { topics } from '../data/mockData';
-import { getArticles, type StoredArticle } from '../services/articleService';
+import { getMyArticles, type StoredArticle } from '../services/articleService';
 import { saveCourse, getCourseById, updateCourse } from '../services/courseService';
 import type { CourseChapter } from '../types';
+import { useToast } from '../contexts/ToastContext';
 
 const CourseEditor = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditing = Boolean(id);
+  const toast = useToast();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -23,7 +25,7 @@ const CourseEditor = () => {
   useEffect(() => {
     const loadData = async () => {
       // Load available articles
-      const articles = await getArticles();
+      const articles = await getMyArticles();
       setAvailableArticles(articles.filter(a => a.published));
 
       // Load existing course if editing
@@ -49,7 +51,7 @@ const CourseEditor = () => {
 
     // Check if already added
     if (chapters.some(ch => ch.articleId === articleId)) {
-      alert('This article is already in the course');
+      toast.warning('This article is already in the course');
       return;
     }
 
@@ -90,11 +92,11 @@ const CourseEditor = () => {
 
   const handleSave = async (publish: boolean) => {
     if (!title.trim()) {
-      alert('Please add a course title');
+      toast.warning('Please add a course title');
       return;
     }
     if (chapters.length === 0) {
-      alert('Please add at least one chapter');
+      toast.warning('Please add at least one chapter');
       return;
     }
 
@@ -117,10 +119,11 @@ const CourseEditor = () => {
       } else {
         await saveCourse(courseData);
       }
+      toast.success(publish ? 'Course published!' : 'Draft saved');
       navigate('/dashboard');
     } catch (error) {
       console.error('Error saving course:', error);
-      alert('Error saving course. Please try again.');
+      toast.error('Failed to save course: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setSaving(false);
     }

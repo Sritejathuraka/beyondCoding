@@ -8,6 +8,7 @@ import {
   updateArticle, 
   calculateReadTime 
 } from '../services/articleService';
+import { useToast } from '../contexts/ToastContext';
 
 // Helper to strip HTML tags for word count
 const stripHtml = (html: string): string => {
@@ -20,6 +21,7 @@ const ArticleEditor = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditing = Boolean(id);
+  const toast = useToast();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -45,7 +47,7 @@ const ArticleEditor = () => {
 
   const handleSaveDraft = async () => {
     if (!title.trim()) {
-      alert('Please add a title');
+      toast.warning('Please add a title');
       return;
     }
 
@@ -62,27 +64,37 @@ const ArticleEditor = () => {
       published: false,
     };
 
-    if (isEditing && id) {
-      await updateArticle(id, articleData);
-    } else {
-      await saveArticle(articleData);
+    try {
+      if (isEditing && id) {
+        await updateArticle(id, articleData);
+      } else {
+        await saveArticle(articleData);
+      }
+      toast.success('Draft saved successfully');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast.error('Failed to save draft: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    navigate('/dashboard');
   };
 
   const handlePublish = async () => {
     if (!title.trim()) {
-      alert('Please add a title');
+      toast.warning('Please add a title');
       return;
     }
-    if (!content.trim()) {
-      alert('Please add some content');
+    
+    // Check actual text content, not just HTML
+    const textContent = stripHtml(content).trim();
+    
+    if (!textContent) {
+      toast.warning('Please add some content');
       return;
     }
     if (!category) {
-      alert('Please select a category');
+      toast.warning('Please select a category');
       return;
     }
 
@@ -99,14 +111,20 @@ const ArticleEditor = () => {
       published: true,
     };
 
-    if (isEditing && id) {
-      await updateArticle(id, articleData);
-    } else {
-      await saveArticle(articleData);
+    try {
+      if (isEditing && id) {
+        await updateArticle(id, articleData);
+      } else {
+        await saveArticle(articleData);
+      }
+      toast.success('Article published successfully!');
+      navigate('/');
+    } catch (error) {
+      console.error('Error saving article:', error);
+      toast.error('Failed to publish: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    navigate('/');
   };
 
   return (
