@@ -23,9 +23,11 @@ interface CourseRow {
 interface ChapterRow {
   id: string;
   course_id: string;
-  article_id: string;
+  article_id: string | null;
   title: string;
   chapter_order: number;
+  content: string | null;
+  description: string | null;
 }
 
 // ============================================
@@ -48,7 +50,9 @@ const rowToCourse = (row: CourseRow, chapters: CourseChapter[] = []): Course => 
 
 const rowToChapter = (row: ChapterRow, completed = false): CourseChapter => ({
   id: row.id,
-  articleId: row.article_id,
+  articleId: row.article_id || undefined,
+  content: row.content || undefined,
+  description: row.description || undefined,
   title: row.title,
   order: row.chapter_order,
   completed,
@@ -232,6 +236,36 @@ export const getCourseById = async (id: string): Promise<Course | null> => {
 };
 
 /**
+ * Get a chapter by ID (for viewing standalone chapters)
+ */
+export const getChapterById = async (chapterId: string): Promise<CourseChapter | null> => {
+  if (!isSupabaseConfigured) {
+    const courses = getLocalCourses();
+    for (const course of courses) {
+      const chapter = course.chapters.find(ch => ch.id === chapterId);
+      if (chapter) return chapter;
+    }
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('course_chapters')
+      .select('*')
+      .eq('id', chapterId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return rowToChapter(data as ChapterRow);
+  } catch (error) {
+    console.error('Failed to fetch chapter:', error);
+    return null;
+  }
+};
+
+/**
  * Save a new course
  * @throws Error if save fails
  */
@@ -286,11 +320,21 @@ export const saveCourse = async (
   if (course.chapters && course.chapters.length > 0) {
     const chaptersToInsert = course.chapters.map((ch, index) => ({
       course_id: courseData.id,
-      article_id: ch.articleId,
+      article_id: ch.articleId || null,
       title: ch.title,
       chapter_order: ch.order || index + 1,
+      content: ch.content || null,
+      description: ch.description || null,
     }));
-    await supabase.from('course_chapters').insert(chaptersToInsert);
+    
+    const { error: chapterError } = await supabase
+      .from('course_chapters')
+      .insert(chaptersToInsert);
+    
+    if (chapterError) {
+      console.error('Insert chapters error:', chapterError);
+      throw new Error('Failed to save chapters: ' + chapterError.message);
+    }
   }
 
   return rowToCourse(courseData, course.chapters || []);
@@ -338,16 +382,34 @@ export const updateCourse = async (
 
   // Update chapters if provided
   if (updates.chapters) {
-    await supabase.from('course_chapters').delete().eq('course_id', id);
+    const { error: deleteError } = await supabase
+      .from('course_chapters')
+      .delete()
+      .eq('course_id', id);
+    
+    if (deleteError) {
+      console.error('Delete chapters error:', deleteError);
+      throw new Error('Failed to update chapters: ' + deleteError.message);
+    }
     
     if (updates.chapters.length > 0) {
       const chaptersToInsert = updates.chapters.map((ch, index) => ({
         course_id: id,
-        article_id: ch.articleId,
+        article_id: ch.articleId || null,
         title: ch.title,
         chapter_order: ch.order || index + 1,
+        content: ch.content || null,
+        description: ch.description || null,
       }));
-      await supabase.from('course_chapters').insert(chaptersToInsert);
+      
+      const { error: insertError } = await supabase
+        .from('course_chapters')
+        .insert(chaptersToInsert);
+      
+      if (insertError) {
+        console.error('Insert chapters error:', insertError);
+        throw new Error('Failed to save chapters: ' + insertError.message);
+      }
     }
   }
 

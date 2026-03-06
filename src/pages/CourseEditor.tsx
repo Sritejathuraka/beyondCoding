@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { topics } from '../data/mockData';
 import { getMyArticles, type StoredArticle } from '../services/articleService';
 import { saveCourse, getCourseById, updateCourse } from '../services/courseService';
 import type { CourseChapter } from '../types';
 import { useToast } from '../contexts/ToastContext';
+import RichTextEditor from '../components/RichTextEditor';
+
+// Storage key for auto-saving course editor state (Safari tab discard protection)
+const getStorageKey = (courseId: string | undefined) => `course-editor-${courseId || 'new'}`;
 
 const CourseEditor = () => {
   const navigate = useNavigate();
@@ -21,15 +25,68 @@ const CourseEditor = () => {
   const [availableArticles, setAvailableArticles] = useState<StoredArticle[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [restoredFromCache, setRestoredFromCache] = useState(false);
+
+  // Standalone chapter editor state
+  const [showChapterEditor, setShowChapterEditor] = useState(false);
+  const [editingChapter, setEditingChapter] = useState<CourseChapter | null>(null);
+  const [chapterTitle, setChapterTitle] = useState('');
+  const [chapterDescription, setChapterDescription] = useState('');
+  const [chapterContent, setChapterContent] = useState('');
+
+  // Auto-save to sessionStorage (protects against Safari tab discard)
+  const saveToSession = useCallback(() => {
+    if (loading) return;
+    const data = { title, description, icon, category, estimatedTime, chapters, showChapterEditor, chapterTitle, chapterDescription, chapterContent, editingChapter };
+    sessionStorage.setItem(getStorageKey(id), JSON.stringify(data));
+  }, [id, title, description, icon, category, estimatedTime, chapters, showChapterEditor, chapterTitle, chapterDescription, chapterContent, editingChapter, loading]);
+
+  // Save to sessionStorage whenever form data changes
+  useEffect(() => {
+    saveToSession();
+  }, [saveToSession]);
+
+  // Also save when page becomes hidden (Safari discards soon after)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveToSession();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [saveToSession]);
 
   useEffect(() => {
     const loadData = async () => {
+      // First, try to restore from sessionStorage (Safari tab discard recovery)
+      const cached = sessionStorage.getItem(getStorageKey(id));
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          setTitle(data.title || '');
+          setDescription(data.description || '');
+          setIcon(data.icon || '📚');
+          setCategory(data.category || '');
+          setEstimatedTime(data.estimatedTime || '');
+          setChapters(data.chapters || []);
+          setShowChapterEditor(data.showChapterEditor || false);
+          setChapterTitle(data.chapterTitle || '');
+          setChapterDescription(data.chapterDescription || '');
+          setChapterContent(data.chapterContent || '');
+          setEditingChapter(data.editingChapter || null);
+          setRestoredFromCache(true);
+        } catch (e) {
+          console.warn('Failed to restore course editor state:', e);
+        }
+      }
+
       // Load available articles
       const articles = await getMyArticles();
       setAvailableArticles(articles.filter(a => a.published));
 
-      // Load existing course if editing
-      if (id) {
+      // Load existing course if editing (and not restored from cache)
+      if (id && !cached) {
         const course = await getCourseById(id);
         if (course) {
           setTitle(course.title);
@@ -44,6 +101,14 @@ const CourseEditor = () => {
     };
     loadData();
   }, [id]);
+
+  // Show toast when data restored from cache (Safari tab recovery)
+  useEffect(() => {
+    if (!loading && restoredFromCache) {
+      toast.info('Draft restored from session');
+      setRestoredFromCache(false);
+    }
+  }, [loading, restoredFromCache, toast]);
 
   const addChapter = (articleId: string) => {
     const article = availableArticles.find(a => a.id === articleId);
@@ -90,6 +155,66 @@ const CourseEditor = () => {
     setChapters(updated);
   };
 
+  // Open editor for new standalone chapter
+  const openNewChapterEditor = () => {
+    setEditingChapter(null);
+    setChapterTitle('');
+    setChapterDescription('');
+    setChapterContent('');
+    setShowChapterEditor(true);
+  };
+
+  // Open editor for editing existing standalone chapter
+  const openEditChapterEditor = (chapter: CourseChapter) => {
+    if (chapter.articleId) {
+      toast.info('Article-linked chapters cannot be edited here. Edit the original article instead.');
+      return;
+    }
+    setEditingChapter(chapter);
+    setChapterTitle(chapter.title);
+    setChapterDescription(chapter.description || '');
+    setChapterContent(chapter.content || '');
+    setShowChapterEditor(true);
+  };
+
+  // Save standalone chapter
+  const saveStandaloneChapter = () => {
+    if (!chapterTitle.trim()) {
+      toast.warning('Please add a chapter title');
+      return;
+    }
+    if (!chapterContent.trim()) {
+      toast.warning('Please add chapter content');
+      return;
+    }
+
+    if (editingChapter) {
+      // Update existing chapter
+      const updated = chapters.map(ch => 
+        ch.id === editingChapter.id 
+          ? { ...ch, title: chapterTitle, description: chapterDescription, content: chapterContent }
+          : ch
+      );
+      setChapters(updated);
+    } else {
+      // Add new chapter
+      const newChapter: CourseChapter = {
+        id: crypto.randomUUID(),
+        title: chapterTitle,
+        description: chapterDescription,
+        content: chapterContent,
+        order: chapters.length + 1,
+      };
+      setChapters([...chapters, newChapter]);
+    }
+
+    setShowChapterEditor(false);
+    setEditingChapter(null);
+    setChapterTitle('');
+    setChapterDescription('');
+    setChapterContent('');
+  };
+
   const handleSave = async (publish: boolean) => {
     if (!title.trim()) {
       toast.warning('Please add a course title');
@@ -119,6 +244,8 @@ const CourseEditor = () => {
       } else {
         await saveCourse(courseData);
       }
+      // Clear session cache on successful save
+      sessionStorage.removeItem(getStorageKey(id));
       toast.success(publish ? 'Course published!' : 'Draft saved');
       navigate('/dashboard');
     } catch (error) {
@@ -262,8 +389,9 @@ const CourseEditor = () => {
               Chapters ({chapters.length})
             </label>
             
-            {/* Add Chapter */}
-            <div className="mb-4">
+            {/* Add Chapter Options */}
+            <div className="mb-4 flex gap-3">
+              {/* Add from existing article */}
               <select
                 onChange={(e) => {
                   if (e.target.value) {
@@ -271,9 +399,9 @@ const CourseEditor = () => {
                     e.target.value = '';
                   }
                 }}
-                className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                className="flex-1 px-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
               >
-                <option value="" className="bg-[var(--color-surface)]">+ Add article as chapter...</option>
+                <option value="" className="bg-[var(--color-surface)]">📄 Add existing article...</option>
                 {availableArticles
                   .filter(a => !chapters.some(ch => ch.articleId === a.id))
                   .map((article) => (
@@ -282,20 +410,41 @@ const CourseEditor = () => {
                     </option>
                   ))}
               </select>
+              
+              {/* Write new chapter */}
+              <button
+                type="button"
+                onClick={openNewChapterEditor}
+                className="px-4 py-3 border border-[var(--color-primary)] text-[var(--color-primary)] rounded-lg hover:bg-[var(--color-primary)]/10 transition-colors flex items-center gap-2 whitespace-nowrap"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Write New Chapter
+              </button>
             </div>
 
             {/* Chapter List */}
             {chapters.length === 0 ? (
               <div className="text-center py-12 bg-[var(--color-surface)] rounded-lg border-2 border-dashed border-[var(--color-border)]">
                 <p className="text-[var(--color-text-muted)]">
-                  No chapters yet. Add articles to create your course structure.
+                  No chapters yet. Add existing articles or write new chapters.
                 </p>
-                <Link
-                  to="/write"
-                  className="inline-block mt-2 text-[var(--color-primary)] hover:underline"
-                >
-                  Write a new article →
-                </Link>
+                <div className="flex items-center justify-center gap-4 mt-4">
+                  <Link
+                    to="/write"
+                    className="text-[var(--color-primary)] hover:underline"
+                  >
+                    Write article →
+                  </Link>
+                  <span className="text-[var(--color-text-muted)]">or</span>
+                  <button
+                    onClick={openNewChapterEditor}
+                    className="text-[var(--color-primary)] hover:underline"
+                  >
+                    Write chapter →
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-2">
@@ -311,13 +460,37 @@ const CourseEditor = () => {
                         {index + 1}
                       </span>
 
-                      {/* Title */}
+                      {/* Title + Type Badge */}
                       <div className="flex-1">
-                        <p className="font-medium text-[var(--color-text)]">{chapter.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-[var(--color-text)]">{chapter.title}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            chapter.articleId 
+                              ? 'bg-blue-500/20 text-blue-400' 
+                              : 'bg-green-500/20 text-green-400'
+                          }`}>
+                            {chapter.articleId ? '📄 Article' : '✏️ Standalone'}
+                          </span>
+                        </div>
+                        {chapter.description && (
+                          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">{chapter.description}</p>
+                        )}
                       </div>
 
                       {/* Actions */}
                       <div className="flex items-center gap-1">
+                        {/* Edit button for standalone chapters */}
+                        {!chapter.articleId && (
+                          <button
+                            onClick={() => openEditChapterEditor(chapter)}
+                            className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
+                            title="Edit chapter"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => moveChapter(chapter.id, 'up')}
                           disabled={index === 0}
@@ -355,6 +528,86 @@ const CourseEditor = () => {
           </div>
         </div>
       </main>
+      )}
+
+      {/* Standalone Chapter Editor Modal */}
+      {showChapterEditor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--color-surface)] rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[var(--color-text)]">
+                {editingChapter ? 'Edit Chapter' : 'New Standalone Chapter'}
+              </h2>
+              <button
+                onClick={() => setShowChapterEditor(false)}
+                className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-muted)] mb-2">
+                  Chapter Title *
+                </label>
+                <input
+                  type="text"
+                  value={chapterTitle}
+                  onChange={(e) => setChapterTitle(e.target.value)}
+                  placeholder="e.g., Introduction to the Topic"
+                  className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-primary)]"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-muted)] mb-2">
+                  Description (optional)
+                </label>
+                <input
+                  type="text"
+                  value={chapterDescription}
+                  onChange={(e) => setChapterDescription(e.target.value)}
+                  placeholder="Brief summary of what this chapter covers"
+                  className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-primary)]"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-muted)] mb-2">
+                  Content *
+                </label>
+                <div className="border border-[var(--color-border)] rounded-lg overflow-hidden">
+                  <RichTextEditor
+                    content={chapterContent}
+                    onChange={setChapterContent}
+                    placeholder="Write your chapter content here..."
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-[var(--color-surface)] border-t border-[var(--color-border)] px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => setShowChapterEditor(false)}
+                className="px-4 py-2 border border-[var(--color-border)] text-[var(--color-text)] rounded-lg hover:bg-[var(--color-background)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveStandaloneChapter}
+                className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-colors"
+              >
+                {editingChapter ? 'Save Changes' : 'Add Chapter'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

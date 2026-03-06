@@ -19,7 +19,9 @@ export interface Topic {
 // Course System Types
 export interface CourseChapter {
   id: string;
-  articleId: string;
+  articleId?: string;       // Optional - links to existing article
+  content?: string;         // Optional - standalone chapter content
+  description?: string;     // Optional - chapter description for standalone chapters
   title: string;
   order: number;
   completed?: boolean;

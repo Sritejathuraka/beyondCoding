@@ -61,12 +61,15 @@ const Navbar = () => {
           
           {user ? (
             <div className="flex items-center gap-2 ml-2">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)]">
+              <Link 
+                to="/profile"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 transition-colors"
+              >
                 <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-white text-xs font-medium">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-sm font-medium text-[var(--color-text)]">{displayName}</span>
-              </div>
+              </Link>
               <button 
                 onClick={() => signOut()}
                 className="px-3 py-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-all duration-300 text-sm rounded-full hover:bg-[var(--color-surface)]"
@@ -104,7 +107,11 @@ const Navbar = () => {
             <div className="pt-2 border-t border-[var(--color-border)]">
               {user ? (
                 <>
-                  <div className="flex items-center gap-3 px-4 py-3 mb-2">
+                  <Link 
+                    to="/profile" 
+                    onClick={closeMenu}
+                    className="flex items-center gap-3 px-4 py-3 mb-2 hover:bg-[var(--color-surface)] rounded-lg transition-colors"
+                  >
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-white font-medium">
                       {displayName.charAt(0).toUpperCase()}
                     </div>
@@ -112,7 +119,7 @@ const Navbar = () => {
                       <p className="font-medium text-[var(--color-text)]">{displayName}</p>
                       <p className="text-xs text-[var(--color-text-muted)]">{user.email}</p>
                     </div>
-                  </div>
+                  </Link>
                   <button 
                     onClick={() => { signOut(); closeMenu(); }}
                     className="w-full text-left px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"

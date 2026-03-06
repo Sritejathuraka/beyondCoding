@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -19,7 +19,7 @@ interface AuthContextType {
   loading: boolean;
   profileLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   isAdmin: boolean;
@@ -46,6 +46,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  
+  // Track which user's profile we've already loaded to avoid refetching on tab switch
+  const loadedProfileUserId = useRef<string | null>(null);
+  // Track loading state via ref so it's accessible in callbacks
+  const loadingRef = useRef(true);
 
   // Fetch user profile from profiles table
   const fetchProfile = async (userId: string) => {
@@ -79,15 +84,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (mounted) {
         console.warn('Auth initialization timeout - proceeding without session');
         setLoading(false);
+        loadingRef.current = false;
       }
     }, 3000);
 
     // Set up auth state listener FIRST (this is the reliable source)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return;
         
         clearTimeout(timeout);
+        
+        // For events where we already have the profile loaded for this user,
+        // skip ALL state updates to prevent re-renders on tab switch
+        const sameUser = session?.user?.id === loadedProfileUserId.current;
+        if (sameUser && (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'SIGNED_IN')) {
+          // Just ensure loading is false but don't trigger re-render if already false
+          if (loadingRef.current) {
+            setLoading(false);
+            loadingRef.current = false;
+          }
+          return;
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -97,6 +116,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           fetchProfile(session.user.id).then((userProfile) => {
             if (mounted) {
               setProfile(userProfile);
+              loadedProfileUserId.current = session.user.id;
               setProfileLoading(false);
             }
           }).catch(() => {
@@ -104,10 +124,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           });
         } else {
           setProfile(null);
+          loadedProfileUserId.current = null;
           setProfileLoading(false);
         }
         
         setLoading(false);
+        loadingRef.current = false;
       }
     );
 
@@ -135,13 +157,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName?: string) => {
     if (!isSupabaseConfigured) {
       return { error: new Error('Supabase is not configured. Please set environment variables.') };
     }
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName || email.split('@')[0],
+        }
+      }
     });
     return { error };
   };
@@ -151,6 +178,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(null);
     setSession(null);
     setProfile(null);
+    loadedProfileUserId.current = null;
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     }

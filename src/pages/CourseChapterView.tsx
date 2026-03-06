@@ -1,31 +1,79 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Navbar, Footer, CourseSidebar } from '../components';
+import { Navbar, Footer, CourseSidebar, ArticleContent } from '../components';
+import { extractHeadings, type Heading } from '../components/ArticleContent';
 import SignInPrompt from '../components/SignInPrompt';
 import { getArticleById, type StoredArticle, formatDate } from '../services/articleService';
 import { getCourseById, markChapterComplete, getChapterProgress, type Course, type CourseChapter } from '../services/courseService';
 import { useAuth } from '../contexts/AuthContext';
 
 const CourseChapterView = () => {
-  const { courseId, articleId } = useParams();
+  const { courseId, chapterId } = useParams();
   const { user } = useAuth();
   const [article, setArticle] = useState<StoredArticle | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
+  const [currentChapter, setCurrentChapter] = useState<CourseChapter | null>(null);
   const [progress, setProgress] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [showSignInPrompt, setShowSignInPrompt] = useState(false);
+  const [headings, setHeadings] = useState<Heading[]>([]);
+  const [activeHeadingId, setActiveHeadingId] = useState<string>('');
+
+  // Track active heading based on scroll position
+  const updateActiveHeading = useCallback(() => {
+    if (headings.length === 0) return;
+    
+    const scrollY = window.scrollY;
+    const offset = 120; // Account for navbar
+    
+    // Find the heading that's currently in view
+    for (let i = headings.length - 1; i >= 0; i--) {
+      const element = document.getElementById(headings[i].id);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        const elementTop = rect.top + scrollY;
+        
+        if (scrollY >= elementTop - offset) {
+          setActiveHeadingId(headings[i].id);
+          return;
+        }
+      }
+    }
+    
+    // Default to first heading if scrolled to top
+    if (headings.length > 0) {
+      setActiveHeadingId(headings[0].id);
+    }
+  }, [headings]);
+
+  // Add scroll listener for active heading tracking
+  useEffect(() => {
+    if (headings.length === 0) return;
+    
+    window.addEventListener('scroll', updateActiveHeading, { passive: true });
+    updateActiveHeading(); // Initial check
+    
+    return () => window.removeEventListener('scroll', updateActiveHeading);
+  }, [headings, updateActiveHeading]);
 
   useEffect(() => {
     const loadData = async () => {
-      if (courseId && articleId) {
-        const [foundCourse, found] = await Promise.all([
-          getCourseById(courseId),
-          getArticleById(articleId)
-        ]);
+      if (courseId && chapterId) {
+        // First load the course to find the chapter
+        const foundCourse = await getCourseById(courseId);
         setCourse(foundCourse);
-        setArticle(found);
         
         if (foundCourse) {
+          // Find the chapter by ID
+          const chapter = foundCourse.chapters.find(ch => ch.id === chapterId);
+          setCurrentChapter(chapter || null);
+          
+          // If chapter is linked to an article, fetch the article
+          if (chapter?.articleId) {
+            const foundArticle = await getArticleById(chapter.articleId);
+            setArticle(foundArticle);
+          }
+          
           const courseProgress = await getChapterProgress(foundCourse.id);
           setProgress(courseProgress);
         }
@@ -33,13 +81,7 @@ const CourseChapterView = () => {
       setLoading(false);
     };
     loadData();
-  }, [courseId, articleId]);
-
-  // Find the current chapter by articleId
-  const getCurrentChapter = (): CourseChapter | null => {
-    if (!course || !articleId) return null;
-    return course.chapters.find((c: CourseChapter) => c.articleId === articleId) || null;
-  };
+  }, [courseId, chapterId]);
 
   const handleMarkComplete = async () => {
     if (!user) {
@@ -47,7 +89,6 @@ const CourseChapterView = () => {
       return;
     }
     
-    const currentChapter = getCurrentChapter();
     if (course && currentChapter) {
       await markChapterComplete(course.id, currentChapter.id);
       // Refresh progress
@@ -57,7 +98,6 @@ const CourseChapterView = () => {
   };
 
   const handleContinueWithoutSaving = async () => {
-    const currentChapter = getCurrentChapter();
     if (course && currentChapter) {
       await markChapterComplete(course.id, currentChapter.id);
       const updatedProgress = await getChapterProgress(course.id);
@@ -67,14 +107,13 @@ const CourseChapterView = () => {
   };
 
   const isChapterComplete = () => {
-    const currentChapter = getCurrentChapter();
     if (!currentChapter) return false;
     return progress[currentChapter.id] || false;
   };
 
   const getCurrentChapterIndex = () => {
-    if (!course || !articleId) return -1;
-    return course.chapters.findIndex((c: CourseChapter) => c.articleId === articleId);
+    if (!course || !chapterId) return -1;
+    return course.chapters.findIndex((c: CourseChapter) => c.id === chapterId);
   };
 
   const getNextChapter = () => {
@@ -89,6 +128,53 @@ const CourseChapterView = () => {
     const currentIndex = getCurrentChapterIndex();
     if (currentIndex <= 0) return null;
     return course.chapters[currentIndex - 1];
+  };
+
+  // Get content and metadata - from article or standalone chapter
+  const getChapterContent = () => {
+    if (article) {
+      return article.content;
+    }
+    return currentChapter?.content || '';
+  };
+
+  // Extract headings when content changes
+  useEffect(() => {
+    const content = getChapterContent();
+    if (content) {
+      const extracted = extractHeadings(content);
+      setHeadings(extracted);
+    } else {
+      setHeadings([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article, currentChapter]);
+
+  const getChapterTitle = () => {
+    if (article) return article.title;
+    return currentChapter?.title || 'Chapter';
+  };
+
+  const getChapterDescription = () => {
+    if (article) return article.description;
+    return currentChapter?.description || '';
+  };
+
+  const getChapterMeta = () => {
+    if (article) {
+      return {
+        author: article.author,
+        date: formatDate(article.createdAt),
+        readTime: article.readTime,
+        category: article.category,
+      };
+    }
+    return {
+      author: course?.author || 'Author',
+      date: '',
+      readTime: '',
+      category: course?.category || 'Course',
+    };
   };
 
   if (loading) {
@@ -125,7 +211,7 @@ const CourseChapterView = () => {
     );
   }
 
-  if (!article) {
+  if (!currentChapter) {
     return (
       <div className="min-h-screen bg-[var(--color-background)]">
         <Navbar />
@@ -154,14 +240,21 @@ const CourseChapterView = () => {
   const prevChapter = getPrevChapter();
   const nextChapter = getNextChapter();
   const currentIndex = getCurrentChapterIndex();
+  const chapterMeta = getChapterMeta();
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] overflow-x-hidden">
+    <div className="min-h-screen bg-[var(--color-background)]">
       <Navbar />
       
       <div className="flex">
         {/* Course Sidebar */}
-        <CourseSidebar course={course} currentArticleId={articleId!} progress={progress} />
+        <CourseSidebar 
+          course={course} 
+          currentChapterId={chapterId!} 
+          progress={progress}
+          headings={headings}
+          activeHeadingId={activeHeadingId}
+        />
         
         <main className="flex-1 max-w-3xl px-6 pt-32 pb-20 overflow-hidden animate-fade-in-up">
           {/* Course Progress Bar */}
@@ -189,16 +282,16 @@ const CourseChapterView = () => {
           {/* Article Header */}
           <header className="mb-10">
             <span className="inline-block px-4 py-1.5 text-xs font-medium rounded-full mb-4 bg-gradient-to-r from-[var(--color-primary)]/20 to-[var(--color-secondary)]/20 text-[var(--color-primary)]">
-              {article.category}
+              {chapterMeta.category}
             </span>
             
             <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-4 text-[var(--color-text)]">
-              {article.title}
+              {getChapterTitle()}
             </h1>
             
-            {article.description && (
+            {getChapterDescription() && (
               <p className="text-xl text-[var(--color-text-muted)] mb-6">
-                {article.description}
+                {getChapterDescription()}
               </p>
             )}
             
@@ -207,19 +300,20 @@ const CourseChapterView = () => {
                 ST
               </div>
               <div>
-                <p className="font-medium text-[var(--color-text)]">{article.author}</p>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  {formatDate(article.createdAt)} · {article.readTime}
-                </p>
+                <p className="font-medium text-[var(--color-text)]">{chapterMeta.author}</p>
+                {(chapterMeta.date || chapterMeta.readTime) && (
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    {chapterMeta.date}{chapterMeta.date && chapterMeta.readTime && ' · '}{chapterMeta.readTime}
+                  </p>
+                )}
               </div>
             </div>
           </header>
 
           {/* Article Content */}
-          <article 
+          <ArticleContent 
+            content={getChapterContent()}
             className="prose prose-lg max-w-none overflow-hidden prose-headings:text-[var(--color-text)] prose-p:text-[var(--color-text-muted)] prose-a:text-[var(--color-primary)] prose-strong:text-[var(--color-text)] prose-code:text-[var(--color-secondary)] prose-pre:bg-[#f8fafc] prose-pre:border prose-pre:border-[var(--color-border)]"
-            style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-            dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
           {/* Chapter Navigation */}
@@ -250,7 +344,7 @@ const CourseChapterView = () => {
             <div className="flex items-center justify-between gap-4">
               {prevChapter ? (
                 <Link
-                  to={`/course/${course.id}/chapter/${prevChapter.articleId}`}
+                  to={`/course/${course.id}/chapter/${prevChapter.id}`}
                   className="flex-1 p-4 glass rounded-xl hover:border-[var(--color-primary)] transition-all group"
                 >
                   <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">Previous</span>
@@ -267,7 +361,7 @@ const CourseChapterView = () => {
               
               {nextChapter ? (
                 <Link
-                  to={`/course/${course.id}/chapter/${nextChapter.articleId}`}
+                  to={`/course/${course.id}/chapter/${nextChapter.id}`}
                   className="flex-1 p-4 glass rounded-xl hover:border-[var(--color-primary)] transition-all group text-right"
                 >
                   <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">Next</span>

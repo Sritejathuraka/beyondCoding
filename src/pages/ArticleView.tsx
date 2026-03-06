@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Navbar, Footer, LikeButton, CommentSection } from '../components';
+import { Navbar, Footer, LikeButton, CommentSection, ArticleContent } from '../components';
 import { getArticleById, deleteArticle, type StoredArticle, formatDate } from '../services/articleService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -178,10 +178,9 @@ const ArticleView = () => {
         </header>
 
         {/* Article Content */}
-        <article 
+        <ArticleContent 
+          content={article.content}
           className="prose prose-lg max-w-none overflow-hidden prose-headings:text-[var(--color-text)] prose-p:text-[var(--color-text-muted)] prose-a:text-[var(--color-primary)] prose-strong:text-[var(--color-text)] prose-code:text-[var(--color-secondary)] prose-pre:bg-[#f8fafc] prose-pre:border prose-pre:border-[var(--color-border)]"
-          style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-          dangerouslySetInnerHTML={{ __html: article.content }}
         />
 
         {/* Comments Section */}

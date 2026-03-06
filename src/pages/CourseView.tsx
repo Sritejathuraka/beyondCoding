@@ -142,7 +142,7 @@ const CourseView = () => {
                     <>
                       <span>·</span>
                       <Link
-                        to={`/course/edit/${course.id}`}
+                        to={`/course/${course.id}/edit`}
                         className="text-[var(--color-primary)] hover:text-[var(--color-secondary)] transition-colors flex items-center gap-1"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,7 +191,7 @@ const CourseView = () => {
               <div className="mt-6">
                 {firstIncompleteChapter ? (
                   <Link
-                    to={`/course/${course.id}/chapter/${firstIncompleteChapter.articleId}`}
+                    to={`/course/${course.id}/chapter/${firstIncompleteChapter.id}`}
                     className="btn-primary inline-flex items-center gap-2 group"
                   >
                     {completedCount > 0 ? 'Continue Learning' : 'Start Course'}
@@ -224,7 +224,7 @@ const CourseView = () => {
               return (
                 <Link
                   key={chapter.id}
-                  to={`/course/${course.id}/chapter/${chapter.articleId}`}
+                  to={`/course/${course.id}/chapter/${chapter.id}`}
                   className={`flex items-center gap-4 p-5 rounded-xl border transition-all group ${
                     isCompleted
                       ? 'bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30 hover:border-[var(--color-accent)]'

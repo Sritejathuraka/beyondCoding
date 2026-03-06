@@ -10,3 +10,4 @@ export { default as Footer } from './Footer';
 export { default as CourseSidebar } from './CourseSidebar';
 export { default as LikeButton } from './LikeButton';
 export { default as CommentSection } from './CommentSection';
+export { default as ArticleContent } from './ArticleContent';

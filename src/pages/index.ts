@@ -11,3 +11,4 @@ export { default as CoursesPage } from './CoursesPage';
 export { default as BlogsPage } from './BlogsPage';
 export { default as AboutPage } from './AboutPage';
 export { default as ContactPage } from './ContactPage';
+export { default as ProfilePage } from './ProfilePage';

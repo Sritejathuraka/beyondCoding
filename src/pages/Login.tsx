@@ -7,6 +7,8 @@ import { useToast } from '../contexts/ToastContext';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -28,8 +30,9 @@ const Login = () => {
     setLoading(true);
 
     try {
+      const fullName = `${firstName} ${lastName}`.trim();
       const { error } = isSignUp 
-        ? await signUp(email, password)
+        ? await signUp(email, password, fullName || undefined)
         : await signIn(email, password);
 
       if (error) {
@@ -95,21 +98,58 @@ const Login = () => {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {isSignUp && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label 
+                      htmlFor="firstName" 
+                      className="block text-sm font-medium mb-2 text-[var(--color-text)]"
+                    >
+                      First Name
+                    </label>
+                    <input
+                      id="firstName"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full px-4 py-3 glass rounded-xl bg-[var(--color-surface)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] transition-all"
+                      placeholder="John"
+                    />
+                  </div>
+                  <div>
+                    <label 
+                      htmlFor="lastName" 
+                      className="block text-sm font-medium mb-2 text-[var(--color-text)]"
+                    >
+                      Last Name
+                    </label>
+                    <input
+                      id="lastName"
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-full px-4 py-3 glass rounded-xl bg-[var(--color-surface)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] transition-all"
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label 
                   htmlFor="email" 
                   className="block text-sm font-medium mb-2 text-[var(--color-text)]"
                 >
-                  Email or Username
+                  Email{!isSignUp && ' or Username'}
                 </label>
                 <input
                   id="email"
-                  type="text"
+                  type={isSignUp ? 'email' : 'text'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-4 py-3 glass rounded-xl bg-[var(--color-surface)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] transition-all"
-                  placeholder="you@example.com or teja"
+                  placeholder={isSignUp ? 'you@example.com' : 'you@example.com or teja'}
                 />
               </div>
 

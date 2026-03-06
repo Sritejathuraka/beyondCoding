@@ -1,4 +1,4 @@
-import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { useEditor, EditorContent, type Editor, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
@@ -7,10 +7,125 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { FontFamily } from '@tiptap/extension-font-family';
 import { common, createLowlight } from 'lowlight';
-import { useEffect } from 'react';
-import { Extension } from '@tiptap/core';
+import { useEffect, useState, useRef } from 'react';
+import { Extension, Node } from '@tiptap/core';
 
 const lowlight = createLowlight(common);
+
+// HTML Embed Component - renders HTML in a sandboxed iframe
+// Using 'any' for props since TipTap's ReactNodeViewRenderer has complex types
+const HtmlEmbedComponent = (props: any) => {
+  const { node, selected } = props;
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(400);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !node.attrs.html) return;
+
+    // Write HTML to iframe
+    const doc = iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(node.attrs.html);
+      doc.close();
+
+      // Auto-resize after content loads
+      const resizeObserver = new ResizeObserver(() => {
+        const body = doc.body;
+        if (body) {
+          const newHeight = Math.max(100, body.scrollHeight + 20);
+          setHeight(Math.min(newHeight, 800)); // Cap at 800px
+        }
+      });
+
+      if (doc.body) {
+        resizeObserver.observe(doc.body);
+      }
+
+      return () => resizeObserver.disconnect();
+    }
+  }, [node.attrs.html]);
+
+  return (
+    <NodeViewWrapper className="html-embed-wrapper">
+      <div 
+        className={`relative rounded-lg overflow-hidden border-2 transition-colors my-4 ${
+          selected ? 'border-[var(--color-primary)]' : 'border-[var(--color-border)]'
+        }`}
+      >
+        {/* Label */}
+        <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black/70 text-white text-xs rounded flex items-center gap-1">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          HTML Embed
+        </div>
+
+        <iframe
+          ref={iframeRef}
+          title="HTML Embed"
+          sandbox="allow-scripts allow-same-origin"
+          style={{ 
+            width: '100%', 
+            height: `${height}px`,
+            border: 'none',
+            display: 'block',
+            backgroundColor: '#0f0f0f'
+          }}
+        />
+      </div>
+    </NodeViewWrapper>
+  );
+};
+
+// Custom TipTap Node for HTML embeds
+const HtmlEmbed = Node.create({
+  name: 'htmlEmbed',
+  group: 'block',
+  atom: true,
+  draggable: true,
+
+  addAttributes() {
+    return {
+      html: {
+        default: '',
+        parseHTML: element => {
+          // Try to get from data attribute first, then from script tag
+          const dataHtml = element.getAttribute('data-html-content');
+          if (dataHtml) return dataHtml;
+          
+          const script = element.querySelector('script[type="text/html-embed"]');
+          return script?.textContent || '';
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'div[data-html-embed]',
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    // Store HTML in a hidden script tag to preserve it during serialization
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-html-embed', '');
+    wrapper.setAttribute('data-html-content', HTMLAttributes.html || '');
+    
+    return ['div', { 
+      'data-html-embed': '', 
+      'data-html-content': HTMLAttributes.html || '',
+    }];
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(HtmlEmbedComponent);
+  },
+});
 
 // Custom extension for font size
 const FontSize = Extension.create({
@@ -85,7 +200,7 @@ const MenuButton = ({
   </button>
 );
 
-const MenuBar = ({ editor }: { editor: Editor | null }) => {
+const MenuBar = ({ editor, onAddHtmlEmbed }: { editor: Editor | null; onAddHtmlEmbed: () => void }) => {
   if (!editor) return null;
 
   const addImage = () => {
@@ -300,6 +415,12 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
         </svg>
       </MenuButton>
 
+      <MenuButton onClick={onAddHtmlEmbed} title="Embed HTML (Interactive diagrams, widgets)">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+        </svg>
+      </MenuButton>
+
       <div className="w-px h-6 bg-[var(--color-border)] mx-1" />
 
       {/* Undo/Redo */}
@@ -327,6 +448,9 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
 };
 
 const RichTextEditor = ({ content, onChange, placeholder = 'Start writing...' }: RichTextEditorProps) => {
+  const [showHtmlModal, setShowHtmlModal] = useState(false);
+  const [htmlInput, setHtmlInput] = useState('');
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -352,6 +476,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start writing...' }:
       CodeBlockLowlight.configure({
         lowlight,
       }),
+      HtmlEmbed,
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -375,10 +500,93 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start writing...' }:
     }
   }, [content, editor]);
 
+  const handleInsertHtml = () => {
+    if (!editor || !htmlInput.trim()) return;
+    
+    editor.chain().focus().insertContent({
+      type: 'htmlEmbed',
+      attrs: { html: htmlInput },
+    }).run();
+    
+    setHtmlInput('');
+    setShowHtmlModal(false);
+  };
+
   return (
     <div className="border border-[var(--color-border)] rounded-xl overflow-hidden bg-[var(--color-surface)]">
-      <MenuBar editor={editor} />
+      <MenuBar editor={editor} onAddHtmlEmbed={() => setShowHtmlModal(true)} />
       <EditorContent editor={editor} />
+
+      {/* HTML Embed Modal */}
+      {showHtmlModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--color-surface)] rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
+              <div>
+                <h3 className="text-lg font-bold text-[var(--color-text)]">Embed HTML</h3>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  Paste your HTML code (including styles and scripts)
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowHtmlModal(false);
+                  setHtmlInput('');
+                }}
+                className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              <textarea
+                value={htmlInput}
+                onChange={(e) => setHtmlInput(e.target.value)}
+                placeholder="<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    /* Your styles here */
+  </style>
+</head>
+<body>
+  <!-- Your content here -->
+</body>
+</html>"
+                className="w-full h-80 px-4 py-3 font-mono text-sm border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/30 focus:outline-none focus:border-[var(--color-primary)] resize-none"
+              />
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                The HTML will be rendered in a sandboxed iframe with scripts enabled.
+              </p>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--color-border)]">
+              <button
+                onClick={() => {
+                  setShowHtmlModal(false);
+                  setHtmlInput('');
+                }}
+                className="px-4 py-2 text-[var(--color-text)] border border-[var(--color-border)] rounded-lg hover:bg-[var(--color-background)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleInsertHtml}
+                disabled={!htmlInput.trim()}
+                className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Insert Embed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

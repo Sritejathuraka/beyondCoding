@@ -300,7 +300,14 @@ const Dashboard = () => {
                         {course.icon}
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold mb-1 text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">{course.title}</h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-lg font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">{course.title}</h3>
+                          {course.published ? (
+                            <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full">Published</span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full">Draft</span>
+                          )}
+                        </div>
                         {course.description && (
                           <p className="text-[var(--color-text-muted)] text-sm mb-2">
                             {course.description}
