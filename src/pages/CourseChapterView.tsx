@@ -171,8 +171,8 @@ const CourseChapterView = () => {
     }
     return {
       author: course?.author || 'Author',
-      date: '',
-      readTime: '',
+      date: course?.createdAt ? formatDate(course.createdAt) : '',
+      readTime: course?.estimatedTime || '',
       category: course?.category || 'Course',
     };
   };
